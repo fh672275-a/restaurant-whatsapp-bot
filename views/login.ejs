@@ -307,9 +307,15 @@
           btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login Karein';
         }
       } catch (err) {
-        showAlert('Connection error. Try again.');
+        showAlert('Server se connect nahi ho saka. 3 second baad automatically retry hoga...');
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login Karein';
+        // Auto retry after 3 seconds
+        setTimeout(() => {
+          if (document.getElementById('r-phone').value && document.getElementById('r-password').value) {
+            loginRestaurant({ preventDefault: () => {} });
+          }
+        }, 3000);
       }
     }
 
@@ -338,9 +344,14 @@
           btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Admin Login';
         }
       } catch (err) {
-        showAlert('Connection error. Try again.');
+        showAlert('Server se connect nahi ho saka. 3 second baad retry hoga...');
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Admin Login';
+        setTimeout(() => {
+          if (document.getElementById('a-username').value && document.getElementById('a-password').value) {
+            loginAdmin({ preventDefault: () => {} });
+          }
+        }, 3000);
       }
     }
 
