@@ -1,0 +1,14 @@
+[DB] Database initialized successfully
+=================================================
+  Restaurant WhatsApp Bot System
+=================================================
+  Server running on port: 3000
+  Dashboard: http://localhost:3000
+  Admin login: admin / admin123
+=================================================
+
+[Startup] Restoring WhatsApp sessions...
+[WA] Found 0 connected restaurants, restoring sessions...
+[Startup] All sessions restored.
+
+✅ System ready! Open dashboard and connect a restaurant WhatsApp.

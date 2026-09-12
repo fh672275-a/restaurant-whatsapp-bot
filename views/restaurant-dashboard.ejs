@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Restaurant Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/css/dashboard.css" rel="stylesheet">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo"><i class="fab fa-whatsapp"></i></div>
+        <div>
+          <h2 id="rest-name">Restaurant</h2>
+          <p>Owner Panel</p>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/restaurant/dashboard" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="/restaurant/orders"><i class="fas fa-shopping-bag"></i> Orders</a>
+        <a href="/restaurant/menu"><i class="fas fa-utensils"></i> Menu</a>
+        <a href="/restaurant/whatsapp"><i class="fab fa-whatsapp"></i> WhatsApp Connect</a>
+        <a href="/restaurant/settings"><i class="fas fa-cog"></i> Settings</a>
+        <a href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <h1>Dashboard</h1>
+        <div id="wa-status" class="user-info"></div>
+      </header>
+
+      <div class="content-body">
+        <!-- Stats -->
+        <div class="stats-grid">
+          <div class="stat-card stat-blue">
+            <div class="stat-icon"><i class="fas fa-shopping-bag"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="today-orders">0</div>
+              <div class="stat-label">Today's Orders</div>
+            </div>
+          </div>
+          <div class="stat-card stat-green">
+            <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="today-revenue">Rs. 0</div>
+              <div class="stat-label">Today's Revenue</div>
+            </div>
+          </div>
+          <div class="stat-card stat-orange">
+            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="pending-orders">0</div>
+              <div class="stat-label">Pending Orders</div>
+            </div>
+          </div>
+          <div class="stat-card stat-purple">
+            <div class="stat-icon"><i class="fas fa-users"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="total-customers">0</div>
+              <div class="stat-label">Total Customers</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- WhatsApp Status Alert -->
+        <div id="wa-alert" class="alert alert-warning mt-4" style="display:none;">
+          <i class="fas fa-exclamation-triangle"></i>
+          <strong>WhatsApp connected nahi hai!</strong> Orders receive karne k liye 
+          <a href="/restaurant/whatsapp" class="alert-link">yahan se WhatsApp connect karein</a>.
+        </div>
+
+        <!-- Recent Orders -->
+        <div class="card mt-4">
+          <div class="card-header">
+            <h3>Recent Orders</h3>
+            <a href="/restaurant/orders" class="btn btn-sm btn-primary">View All</a>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Phone</th>
+                    <th>Items</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Time</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-orders">
+                  <tr><td colspan="7" class="text-center">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 7 Days Chart -->
+        <div class="card mt-4">
+          <div class="card-header"><h3>Last 7 Days</h3></div>
+          <div class="card-body">
+            <div id="chart-container" style="height: 250px;"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const RESTAURANT_ID = '<%= user.id %>';
+
+    // Listen for new orders
+    socket.on(`restaurant:new_order:${RESTAURANT_ID}`, (data) => {
+      // Show notification
+      showNotification(`Naya order! ${data.items.length} items - Rs. ${data.total}`);
+      // Refresh dashboard
+      loadDashboard();
+    });
+
+    function showNotification(msg) {
+      // Browser notification
+      if (Notification.permission === 'granted') {
+        new Notification('New Order!', { body: msg });
+      }
+      // Also show alert on page
+      const alert = document.createElement('div');
+      alert.className = 'alert alert-success alert-dismissible';
+      alert.innerHTML = `<strong>New Order!</strong> ${msg} <button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+      document.querySelector('.content-body').prepend(alert);
+    }
+
+    async function loadDashboard() {
+      try {
+        const res = await fetch('/api/restaurants/<%= user.id %>');
+        const data = await res.json();
+        const r = data.restaurant;
+        const s = data.stats;
+        
+        document.getElementById('rest-name').textContent = r.name;
+        document.getElementById('today-orders').textContent = s.today_orders;
+        document.getElementById('pending-orders').textContent = s.pending_orders;
+        document.getElementById('total-customers').textContent = s.total_customers;
+
+        // WhatsApp status
+        const waEl = document.getElementById('wa-status');
+        const waAlert = document.getElementById('wa-alert');
+        if (data.whatsapp.status === 'connected') {
+          waEl.innerHTML = `<span class="badge bg-success"><i class="fab fa-whatsapp"></i> ${data.whatsapp.phone}</span>`;
+          waAlert.style.display = 'none';
+        } else {
+          waEl.innerHTML = `<span class="badge bg-warning"><i class="fas fa-exclamation"></i> Not Connected</span>`;
+          waAlert.style.display = 'block';
+        }
+
+        // Load orders stats
+        const statsRes = await fetch('/api/orders/stats/summary');
+        const statsData = await statsRes.json();
+        const stats = statsData.stats;
+        
+        if (stats.today) {
+          document.getElementById('today-revenue').textContent = 'Rs. ' + (stats.today.revenue || 0).toLocaleString();
+        }
+
+        // Last 7 days chart
+        if (stats.last_7_days) {
+          renderChart(stats.last_7_days);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+
+      // Load recent orders
+      try {
+        const res = await fetch('/api/orders?limit=10');
+        const data = await res.json();
+        const tbody = document.getElementById('recent-orders');
+        if (!data.orders || data.orders.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3">Abhi tak koi order nahi aaya</td></tr>';
+          return;
+        }
+        const statusColors = {
+          'new': 'info', 'confirmed': 'primary', 'preparing': 'warning',
+          'ready': 'success', 'delivered': 'secondary', 'cancelled': 'danger'
+        };
+        tbody.innerHTML = data.orders.map(o => `
+          <tr>
+            <td><small><code>${o.id.substring(0, 8)}</code></small></td>
+            <td>${o.customer_name || '-'}</td>
+            <td>${o.customer_phone}</td>
+            <td>${o.items.length} items</td>
+            <td>Rs. ${o.total}</td>
+            <td><span class="badge bg-${statusColors[o.status]}">${o.status}</span></td>
+            <td><small>${new Date(o.created_at).toLocaleString()}</small></td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function renderChart(data) {
+      const container = document.getElementById('chart-container');
+      const maxRevenue = Math.max(...data.map(d => d.revenue), 1);
+      
+      container.innerHTML = `
+        <div style="display:flex; align-items:flex-end; height: 200px; gap: 10px; padding: 20px 0;">
+          ${data.reverse().map(d => `
+            <div style="flex:1; display:flex; flex-direction:column; align-items:center;">
+              <div style="font-size:11px; color:#666; margin-bottom:4px;">Rs. ${(d.revenue/1000).toFixed(1)}k</div>
+              <div style="width:100%; height:${(d.revenue/maxRevenue)*180}px; background:linear-gradient(180deg, #25D366 0%, #128C7E 100%); border-radius:6px 6px 0 0; min-height:2px;"></div>
+              <div style="font-size:11px; color:#999; margin-top:4px;">${new Date(d.date).toLocaleDateString('en', {weekday:'short'})}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Request notification permission
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    loadDashboard();
+    // Refresh every 30 seconds
+    setInterval(loadDashboard, 30000);
+  </script>
+</body>
+</html>

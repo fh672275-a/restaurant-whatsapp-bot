@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Restaurant Detail - Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/css/dashboard.css" rel="stylesheet">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo"><i class="fab fa-whatsapp"></i></div>
+        <div><h2>Bot Admin</h2><p>Super Admin</p></div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/admin/dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="/admin/restaurants"><i class="fas fa-store"></i> Restaurants</a>
+        <a href="/admin/restaurants/new"><i class="fas fa-plus-circle"></i> Add Restaurant</a>
+        <a href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <h1 id="rest-title">Restaurant Detail</h1>
+        <a href="/admin/restaurants" class="btn btn-secondary btn-sm">
+          <i class="fas fa-arrow-left"></i> Back
+        </a>
+      </header>
+
+      <div class="content-body">
+        <!-- Stats -->
+        <div class="stats-grid">
+          <div class="stat-card stat-blue">
+            <div class="stat-icon"><i class="fas fa-shopping-bag"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="total-orders">-</div>
+              <div class="stat-label">Total Orders</div>
+            </div>
+          </div>
+          <div class="stat-card stat-green">
+            <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="total-revenue">-</div>
+              <div class="stat-label">Total Revenue</div>
+            </div>
+          </div>
+          <div class="stat-card stat-orange">
+            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="pending-orders">-</div>
+              <div class="stat-label">Pending Orders</div>
+            </div>
+          </div>
+          <div class="stat-card stat-purple">
+            <div class="stat-icon"><i class="fas fa-users"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="total-customers">-</div>
+              <div class="stat-label">Customers</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- WhatsApp Status -->
+        <div class="card mt-4">
+          <div class="card-header"><h3>WhatsApp Connection</h3></div>
+          <div class="card-body" id="wa-info">
+            Loading...
+          </div>
+        </div>
+
+        <!-- Recent Orders -->
+        <div class="card mt-4">
+          <div class="card-header"><h3>Recent Orders</h3></div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Items</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody id="orders-list">
+                  <tr><td colspan="6" class="text-center">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const RESTAURANT_ID = '<%= restaurantId %>';
+
+    async function loadData() {
+      try {
+        // Restaurant details
+        const res = await fetch(`/api/restaurants/${RESTAURANT_ID}`);
+        const data = await res.json();
+        const r = data.restaurant;
+        const s = data.stats;
+        const wa = data.whatsapp;
+        
+        document.getElementById('rest-title').textContent = r.name;
+        document.getElementById('total-orders').textContent = s.total_orders;
+        document.getElementById('total-revenue').textContent = 'Rs. ' + (s.total_revenue || 0).toLocaleString();
+        document.getElementById('pending-orders').textContent = s.pending_orders;
+        document.getElementById('total-customers').textContent = s.total_customers;
+
+        // WhatsApp info
+        const waInfo = document.getElementById('wa-info');
+        if (wa.status === 'connected') {
+          waInfo.innerHTML = `
+            <div class="d-flex align-items-center justify-content-between">
+              <div>
+                <span class="badge bg-success"><i class="fab fa-whatsapp"></i> Connected</span>
+                <strong class="ms-2">${wa.phone}</strong>
+              </div>
+              <button onclick="disconnectWA()" class="btn btn-danger btn-sm">
+                <i class="fas fa-power-off"></i> Disconnect
+              </button>
+            </div>
+          `;
+        } else {
+          waInfo.innerHTML = `
+            <div class="d-flex align-items-center justify-content-between">
+              <div>
+                <span class="badge bg-warning">Not Connected</span>
+                <small class="ms-2 text-muted">Restaurant khud connect karega apne dashboard se</small>
+              </div>
+            </div>
+          `;
+        }
+
+        // Orders
+        const ordersRes = await fetch(`/api/orders?restaurant_id=${RESTAURANT_ID}&limit=20`);
+        const ordersData = await ordersRes.json();
+        const tbody = document.getElementById('orders-list');
+        if (!ordersData.orders || ordersData.orders.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3">Koi order nahi</td></tr>';
+        } else {
+          const statusColors = {
+            'new': 'info', 'confirmed': 'primary', 'preparing': 'warning',
+            'ready': 'success', 'delivered': 'secondary', 'cancelled': 'danger'
+          };
+          tbody.innerHTML = ordersData.orders.map(o => `
+            <tr>
+              <td><code>${o.id.substring(0, 8)}</code></td>
+              <td>${o.customer_name || o.customer_phone}</td>
+              <td>${o.items.length} items</td>
+              <td>Rs. ${o.total}</td>
+              <td><span class="badge bg-${statusColors[o.status]}">${o.status}</span></td>
+              <td><small>${new Date(o.created_at).toLocaleDateString()}</small></td>
+            </tr>
+          `).join('');
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function disconnectWA() {
+      if (!confirm('Disconnect WhatsApp?')) return;
+      await fetch(`/api/whatsapp/disconnect?restaurant_id=${RESTAURANT_ID}`, { method: 'POST' });
+      loadData();
+    }
+
+    loadData();
+  </script>
+</body>
+</html>

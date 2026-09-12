@@ -1,0 +1,287 @@
+/**
+ * Main Server - Restaurant WhatsApp Bot System
+ * 
+ * Features:
+ * - Multi-restaurant WhatsApp bot (100+ restaurants supported)
+ * - One-time QR scan, persistent sessions
+ * - Roman English customer interaction
+ * - Order management with dashboard
+ * - Real-time updates via Socket.io
+ */
+
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const session = require('express-session');
+const bodyParser = require('body-parser');
+const path = require('path');
+const fs = require('fs');
+const config = require('./src/config');
+
+// Ensure data directories exist
+if (!fs.existsSync(config.WHATSAPP_SESSIONS_DIR)) {
+  fs.mkdirSync(config.WHATSAPP_SESSIONS_DIR, { recursive: true });
+}
+
+// Initialize database
+const { initDatabase, db } = require('./src/db');
+initDatabase();
+
+// Import routes
+const authRoutes = require('./src/routes/auth');
+const restaurantRoutes = require('./src/routes/restaurants');
+const menuRoutes = require('./src/routes/menus');
+const orderRoutes = require('./src/routes/orders');
+const whatsappRoutes = require('./src/routes/whatsapp');
+
+// Import WhatsApp manager
+const waManager = require('./src/whatsapp/manager');
+
+// Create app
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: '*', methods: ['GET', 'POST'] }
+});
+
+// Set socket.io on manager
+waManager.setSocketIO(io);
+
+// Make io globally accessible for bot handler
+global.socketIO = io;
+global.app = app;
+
+// Middleware
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json({ limit: '5mb' }));
+app.use(session({
+  secret: config.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    httpOnly: true
+  }
+}));
+
+// Static files
+app.use(express.static(path.join(__dirname, 'public')));
+
+// View engine
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
+// Make session user available to all views
+app.use((req, res, next) => {
+  res.locals.user = req.session.user || null;
+  next();
+});
+
+// ============ Routes ============
+
+// Home page - redirect based on auth
+app.get('/', (req, res) => {
+  if (!req.session.user) {
+    return res.redirect('/login');
+  }
+  if (req.session.user.type === 'super_admin') {
+    return res.redirect('/admin/dashboard');
+  }
+  return res.redirect('/restaurant/dashboard');
+});
+
+// Login page
+app.get('/login', (req, res) => {
+  if (req.session.user) return res.redirect('/');
+  res.render('login');
+});
+
+// Logout
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => res.redirect('/login'));
+});
+
+// Admin Dashboard
+app.get('/admin/dashboard', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'super_admin') {
+    return res.redirect('/login');
+  }
+  res.render('admin-dashboard');
+});
+
+// Admin - Restaurants list
+app.get('/admin/restaurants', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'super_admin') {
+    return res.redirect('/login');
+  }
+  res.render('admin-restaurants');
+});
+
+// Admin - Add/Edit Restaurant
+app.get('/admin/restaurants/new', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'super_admin') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-form', { mode: 'new' });
+});
+
+app.get('/admin/restaurants/:id/edit', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'super_admin') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-form', { mode: 'edit', restaurantId: req.params.id });
+});
+
+// Admin - View restaurant orders
+app.get('/admin/restaurants/:id', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'super_admin') {
+    return res.redirect('/login');
+  }
+  res.render('admin-restaurant-detail', { restaurantId: req.params.id });
+});
+
+// Restaurant Dashboard
+app.get('/restaurant/dashboard', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-dashboard');
+});
+
+// Restaurant - Menu management
+app.get('/restaurant/menu', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-menu');
+});
+
+// Restaurant - Orders
+app.get('/restaurant/orders', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-orders');
+});
+
+// Restaurant - WhatsApp Connect (QR Code page)
+app.get('/restaurant/whatsapp', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-whatsapp');
+});
+
+// Restaurant - Settings
+app.get('/restaurant/settings', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-settings');
+});
+
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/restaurants', restaurantRoutes);
+app.use('/api/menus', menuRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
+
+// Socket.io connection
+io.on('connection', (socket) => {
+  console.log('[IO] Client connected:', socket.id);
+  
+  socket.on('disconnect', () => {
+    console.log('[IO] Client disconnected:', socket.id);
+  });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('[Error]', err.message);
+  res.status(500).json({ error: 'Internal server error', message: err.message });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).render('404');
+});
+
+// Start server
+const PORT = config.PORT;
+server.listen(PORT, '0.0.0.0', async () => {
+  console.log('=================================================');
+  console.log('  Restaurant WhatsApp Bot System');
+  console.log('=================================================');
+  console.log(`  Server running on port: ${PORT}`);
+  console.log(`  Dashboard: http://localhost:${PORT}`);
+  console.log(`  Admin login: admin / admin123`);
+  console.log('=================================================');
+  console.log('');
+  
+  // Restore previously connected WhatsApp sessions
+  console.log('[Startup] Restoring WhatsApp sessions...');
+  try {
+    await waManager.initializeConnectedRestaurants();
+    console.log('[Startup] All sessions restored.');
+  } catch (e) {
+    console.error('[Startup] Session restore error:', e.message);
+  }
+  
+  console.log('');
+  console.log('✅ System ready! Open dashboard and connect a restaurant WhatsApp.');
+});
+
+// Handle graceful shutdown
+let isShuttingDown = false;
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`\n[Shutdown] ${signal} received. Cleaning up...`);
+  
+  // Close WhatsApp sessions
+  for (const [restaurantId, session] of waManager.sessions) {
+    try {
+      if (session.socket && typeof session.socket.end === 'function') {
+        session.socket.end();
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  
+  // Close database
+  try {
+    const { db } = require('./src/db');
+    db.close();
+    console.log('[Shutdown] Database closed.');
+  } catch (e) {
+    // ignore
+  }
+  
+  // Close server
+  server.close(() => {
+    console.log('[Shutdown] Server closed.');
+    process.exit(0);
+  });
+  
+  // Force exit after 5 seconds
+  setTimeout(() => {
+    console.log('[Shutdown] Force exit.');
+    process.exit(0);
+  }, 5000);
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Unhandled Rejection]', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Uncaught Exception]', err.message);
+  console.error(err.stack);
+});
+
+module.exports = { app, server, io, getIO: () => io };

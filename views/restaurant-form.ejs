@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= mode === 'new' ? 'Add' : 'Edit' %> Restaurant</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/css/dashboard.css" rel="stylesheet">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo"><i class="fab fa-whatsapp"></i></div>
+        <div><h2>Bot Admin</h2><p>Super Admin</p></div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/admin/dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="/admin/restaurants"><i class="fas fa-store"></i> Restaurants</a>
+        <a href="/admin/restaurants/new" class="<%= mode === 'new' ? 'active' : '' %>"><i class="fas fa-plus-circle"></i> Add Restaurant</a>
+        <a href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <h1><%= mode === 'new' ? 'Add New Restaurant' : 'Edit Restaurant' %></h1>
+        <a href="/admin/restaurants" class="btn btn-secondary">
+          <i class="fas fa-arrow-left"></i> Back
+        </a>
+      </header>
+
+      <div class="content-body">
+        <div class="card">
+          <div class="card-body">
+            <form id="restaurant-form">
+              <% if (mode === 'new') { %>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Restaurant Name *</label>
+                  <input type="text" class="form-control" id="name" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Owner Name</label>
+                  <input type="text" class="form-control" id="owner_name">
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Phone Number *</label>
+                  <input type="text" class="form-control" id="phone" placeholder="03001234567" required>
+                  <small class="text-muted">Yeh restaurant k login phone hoga</small>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Email</label>
+                  <input type="email" class="form-control" id="email">
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Password *</label>
+                  <input type="password" class="form-control" id="password" required minlength="6">
+                  <small class="text-muted">Min 6 characters</small>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Address</label>
+                  <input type="text" class="form-control" id="address">
+                </div>
+              </div>
+              <button type="submit" class="btn btn-success">
+                <i class="fas fa-save"></i> Restaurant Create Karein
+              </button>
+              <% } else { %>
+              <input type="hidden" id="restaurant_id" value="<%= restaurantId %>">
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Restaurant Name</label>
+                  <input type="text" class="form-control" id="name" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Owner Name</label>
+                  <input type="text" class="form-control" id="owner_name">
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Email</label>
+                  <input type="email" class="form-control" id="email">
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Address</label>
+                  <input type="text" class="form-control" id="address">
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Status</label>
+                <select class="form-control" id="is_active">
+                  <option value="1">Active</option>
+                  <option value="0">Inactive</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn-success">
+                <i class="fas fa-save"></i> Update Karein
+              </button>
+              <% } %>
+            </form>
+            <div id="alert" class="alert mt-3" style="display:none;"></div>
+          </div>
+        </div>
+
+        <% if (mode === 'edit') { %>
+        <div class="card mt-4">
+          <div class="card-header"><h3>Change Password</h3></div>
+          <div class="card-body">
+            <form id="password-form">
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Current Password</label>
+                  <input type="password" class="form-control" id="current_password" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">New Password</label>
+                  <input type="password" class="form-control" id="new_password" required minlength="6">
+                </div>
+              </div>
+              <button type="submit" class="btn btn-warning">
+                <i class="fas fa-key"></i> Password Change
+              </button>
+            </form>
+          </div>
+        </div>
+        <% } %>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const MODE = '<%= mode %>';
+    const RESTAURANT_ID = '<%= restaurantId %>';
+
+    function showAlert(msg, type = 'danger') {
+      const alert = document.getElementById('alert');
+      alert.className = `alert alert-${type}`;
+      alert.textContent = msg;
+      alert.style.display = 'block';
+      setTimeout(() => alert.style.display = 'none', 5000);
+    }
+
+    if (MODE === 'edit') {
+      // Load restaurant data
+      fetch(`/api/restaurants/${RESTAURANT_ID}`)
+        .then(r => r.json())
+        .then(data => {
+          const r = data.restaurant;
+          document.getElementById('name').value = r.name;
+          document.getElementById('owner_name').value = r.owner_name || '';
+          document.getElementById('email').value = r.email || '';
+          document.getElementById('address').value = r.address || '';
+          document.getElementById('is_active').value = r.is_active ? '1' : '0';
+        });
+
+      document.getElementById('restaurant-form').onsubmit = async (e) => {
+        e.preventDefault();
+        try {
+          const res = await fetch(`/api/restaurants/${RESTAURANT_ID}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: document.getElementById('name').value,
+              owner_name: document.getElementById('owner_name').value,
+              email: document.getElementById('email').value,
+              address: document.getElementById('address').value,
+              is_active: document.getElementById('is_active').value === '1'
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            showAlert('Restaurant update ho gaya!', 'success');
+          } else {
+            showAlert(data.error || 'Update failed');
+          }
+        } catch (e) {
+          showAlert('Connection error');
+        }
+      };
+
+      document.getElementById('password-form').onsubmit = async (e) => {
+        e.preventDefault();
+        try {
+          const res = await fetch(`/api/restaurants/${RESTAURANT_ID}/change-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              current_password: document.getElementById('current_password').value,
+              new_password: document.getElementById('new_password').value
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            showAlert('Password change ho gaya!', 'success');
+            document.getElementById('password-form').reset();
+          } else {
+            showAlert(data.error || 'Failed');
+          }
+        } catch (e) {
+          showAlert('Connection error');
+        }
+      };
+    } else {
+      // New restaurant
+      document.getElementById('restaurant-form').onsubmit = async (e) => {
+        e.preventDefault();
+        try {
+          const res = await fetch('/api/restaurants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: document.getElementById('name').value,
+              owner_name: document.getElementById('owner_name').value,
+              phone: document.getElementById('phone').value,
+              email: document.getElementById('email').value,
+              address: document.getElementById('address').value,
+              password: document.getElementById('password').value
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            alert('Restaurant create ho gaya! Ab isko edit karein aur WhatsApp connect karein.');
+            window.location.href = `/admin/restaurants/${data.id}/edit`;
+          } else {
+            showAlert(data.error || 'Create failed');
+          }
+        } catch (e) {
+          showAlert('Connection error');
+        }
+      };
+    }
+  </script>
+</body>
+</html>
