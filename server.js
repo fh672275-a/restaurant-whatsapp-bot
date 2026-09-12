@@ -98,6 +98,20 @@ app.get('/login', (req, res) => {
   res.render('login');
 });
 
+// Signup page (restaurant self-registration)
+app.get('/signup', (req, res) => {
+  if (req.session.user) return res.redirect('/');
+  res.render('signup');
+});
+
+// Onboarding page (after signup)
+app.get('/restaurant/onboarding', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('onboarding');
+});
+
 // Logout
 app.get('/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/login'));

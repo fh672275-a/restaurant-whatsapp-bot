@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Restaurant Setup - WhatsApp Bot</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/css/dashboard.css" rel="stylesheet">
+  <style>
+    .welcome-banner {
+      background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+      color: white;
+      padding: 30px;
+      border-radius: 15px;
+      margin-bottom: 25px;
+      text-align: center;
+    }
+    .welcome-banner h2 { font-size: 26px; margin-bottom: 8px; }
+    .welcome-banner p { margin: 0; opacity: 0.95; }
+    
+    .setup-card {
+      background: white;
+      border-radius: 15px;
+      padding: 25px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      transition: all 0.3s;
+      border-left: 4px solid transparent;
+    }
+    .setup-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .setup-card.completed { border-left-color: #25D366; opacity: 0.8; }
+    .setup-card.pending { border-left-color: #f39c12; }
+    .setup-card.not-started { border-left-color: #ddd; }
+    
+    .step-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      color: white;
+      flex-shrink: 0;
+    }
+    .step-icon.green { background: linear-gradient(135deg, #25D366, #128C7E); }
+    .step-icon.orange { background: linear-gradient(135deg, #f39c12, #e67e22); }
+    .step-icon.gray { background: #bdc3c7; }
+    
+    .progress-bar-custom {
+      height: 8px;
+      background: #e0e0e0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 25px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #25D366, #128C7E);
+      border-radius: 4px;
+      transition: width 0.5s;
+    }
+  </style>
+</head>
+<body>
+  <div class="container py-4">
+    <div class="welcome-banner">
+      <h2><i class="fas fa-rocket"></i> Khush Aamdeed!</h2>
+      <p>Aap ka restaurant account ban gaya hai. Ab kuch quick setup karein taake bot live ho jaye!</p>
+    </div>
+
+    <!-- Progress -->
+    <div class="mb-4">
+      <div class="d-flex justify-content-between mb-2">
+        <strong>Setup Progress</strong>
+        <span id="progress-text">0/4 completed</span>
+      </div>
+      <div class="progress-bar-custom">
+        <div class="progress-fill" id="progress-fill" style="width: 0%;"></div>
+      </div>
+    </div>
+
+    <!-- Step 1: WhatsApp Connect -->
+    <div class="setup-card not-started" id="card-whatsapp">
+      <div class="d-flex align-items-center">
+        <div class="step-icon gray" id="icon-whatsapp">
+          <i class="fab fa-whatsapp"></i>
+        </div>
+        <div class="flex-grow-1 ms-3">
+          <h5 class="mb-1">WhatsApp Connect Karein</h5>
+          <p class="text-muted mb-0">Apna WhatsApp number scan karein - bot live ho jayega</p>
+        </div>
+        <a href="/restaurant/whatsapp" class="btn btn-success">
+          <i class="fas fa-qrcode"></i> Connect
+        </a>
+      </div>
+    </div>
+
+    <!-- Step 2: Menu Add -->
+    <div class="setup-card not-started" id="card-menu">
+      <div class="d-flex align-items-center">
+        <div class="step-icon gray" id="icon-menu">
+          <i class="fas fa-utensils"></i>
+        </div>
+        <div class="flex-grow-1 ms-3">
+          <h5 class="mb-1">Menu Add Karein</h5>
+          <p class="text-muted mb-0">Items, prices, categories set karein (quick sample bhi available)</p>
+        </div>
+        <a href="/restaurant/menu" class="btn btn-primary">
+          <i class="fas fa-plus"></i> Add Menu
+        </a>
+      </div>
+    </div>
+
+    <!-- Step 3: Operating Hours -->
+    <div class="setup-card not-started" id="card-hours">
+      <div class="d-flex align-items-center">
+        <div class="step-icon gray" id="icon-hours">
+          <i class="fas fa-clock"></i>
+        </div>
+        <div class="flex-grow-1 ms-3">
+          <h5 class="mb-1">Operating Hours Set Karein</h5>
+          <p class="text-muted mb-0">Restaurant kab khulta hai? Quick presets available</p>
+        </div>
+        <a href="/restaurant/hours" class="btn btn-warning">
+          <i class="fas fa-clock"></i> Set Hours
+        </a>
+      </div>
+    </div>
+
+    <!-- Step 4: Restaurant Profile -->
+    <div class="setup-card not-started" id="card-profile">
+      <div class="d-flex align-items-center">
+        <div class="step-icon gray" id="icon-profile">
+          <i class="fas fa-user-cog"></i>
+        </div>
+        <div class="flex-grow-1 ms-3">
+          <h5 class="mb-1">Profile Complete Karein</h5>
+          <p class="text-muted mb-0">Address, email, currency, tax, etc set karein</p>
+        </div>
+        <a href="/restaurant/settings" class="btn btn-info">
+          <i class="fas fa-edit"></i> Profile
+        </a>
+      </div>
+    </div>
+
+    <div class="text-center mt-4">
+      <a href="/restaurant/dashboard" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-right"></i> Skip & Go to Dashboard
+      </a>
+    </div>
+  </div>
+
+  <script>
+    async function checkSetupStatus() {
+      try {
+        const res = await fetch('/api/restaurants/<%= user.id %>');
+        const data = await res.json();
+        const r = data.restaurant;
+        const wa = data.whatsapp;
+        
+        let completed = 0;
+        
+        // WhatsApp
+        if (wa.status === 'connected') {
+          document.getElementById('card-whatsapp').classList.remove('not-started');
+          document.getElementById('card-whatsapp').classList.add('completed');
+          document.getElementById('icon-whatsapp').classList.remove('gray');
+          document.getElementById('icon-whatsapp').classList.add('green');
+          completed++;
+        } else {
+          document.getElementById('card-whatsapp').classList.remove('not-started');
+          document.getElementById('card-whatsapp').classList.add('pending');
+          document.getElementById('icon-whatsapp').classList.remove('gray');
+          document.getElementById('icon-whatsapp').classList.add('orange');
+        }
+        
+        // Menu (check via API)
+        const menuRes = await fetch('/api/menus/items');
+        const menuData = await menuRes.json();
+        if (menuData.items && menuData.items.length > 0) {
+          document.getElementById('card-menu').classList.remove('not-started');
+          document.getElementById('card-menu').classList.add('completed');
+          document.getElementById('icon-menu').classList.remove('gray');
+          document.getElementById('icon-menu').classList.add('green');
+          completed++;
+        } else {
+          document.getElementById('card-menu').classList.remove('not-started');
+          document.getElementById('card-menu').classList.add('pending');
+          document.getElementById('icon-menu').classList.remove('gray');
+          document.getElementById('icon-menu').classList.add('orange');
+        }
+        
+        // Hours
+        const hoursRes = await fetch('/api/settings/hours');
+        const hoursData = await hoursRes.json();
+        if (hoursData.hours && hoursData.hours.length > 0) {
+          document.getElementById('card-hours').classList.remove('not-started');
+          document.getElementById('card-hours').classList.add('completed');
+          document.getElementById('icon-hours').classList.remove('gray');
+          document.getElementById('icon-hours').classList.add('green');
+          completed++;
+        } else {
+          document.getElementById('card-hours').classList.remove('not-started');
+          document.getElementById('card-hours').classList.add('pending');
+          document.getElementById('icon-hours').classList.remove('gray');
+          document.getElementById('icon-hours').classList.add('orange');
+        }
+        
+        // Profile (check if address set)
+        if (r.address) {
+          document.getElementById('card-profile').classList.remove('not-started');
+          document.getElementById('card-profile').classList.add('completed');
+          document.getElementById('icon-profile').classList.remove('gray');
+          document.getElementById('icon-profile').classList.add('green');
+          completed++;
+        } else {
+          document.getElementById('card-profile').classList.remove('not-started');
+          document.getElementById('card-profile').classList.add('pending');
+          document.getElementById('icon-profile').classList.remove('gray');
+          document.getElementById('icon-profile').classList.add('orange');
+        }
+        
+        // Update progress
+        document.getElementById('progress-text').textContent = `${completed}/4 completed`;
+        document.getElementById('progress-fill').style.width = `${(completed / 4) * 100}%`;
+        
+        if (completed === 4) {
+          setTimeout(() => {
+            window.location.href = '/restaurant/dashboard';
+          }, 2000);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    
+    checkSetupStatus();
+  </script>
+</body>
+</html>
