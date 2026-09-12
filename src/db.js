@@ -1,6 +1,8 @@
 /**
- * SQLite Database Layer
- * Handles all database operations for the Restaurant WhatsApp Bot
+ * Database Layer - SQLite (works on Railway with persistent volume)
+ * 
+ * Uses better-sqlite3 for fast sync operations.
+ * Railway: Mount a volume at /data to persist SQLite database.
  */
 
 const Database = require('better-sqlite3');
@@ -9,31 +11,158 @@ const path = require('path');
 const fs = require('fs');
 const config = require('./config');
 
-// Ensure data directory exists
-const dataDir = path.dirname(config.DB_PATH);
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+// Determine database path
+// Railway: Use /data/app.db (mounted volume)
+// Local: Use data/app.db
+const DB_PATH = process.env.RAILWAY_VOLUME_MOUNT_PATH 
+  ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'app.db')
+  : config.DB_PATH;
+
+// Determine WhatsApp sessions directory
+const SESSIONS_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH
+  ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'whatsapp_sessions')
+  : config.WHATSAPP_SESSIONS_DIR;
+
+// Ensure directories exist
+const dbDir = path.dirname(DB_PATH);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+if (!fs.existsSync(SESSIONS_DIR)) {
+  fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 }
 
-const db = new Database(config.DB_PATH);
+// Update config paths
+config.DB_PATH = DB_PATH;
+config.WHATSAPP_SESSIONS_DIR = SESSIONS_DIR;
+
+// Create database connection
+const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.pragma('busy_timeout = 5000');
 
-// Add new V2 tables/columns if missing (idempotent - safe to run multiple times)
-function ensureV2Tables() {
-  // New tables
+// Handle cleanup on exit
+process.on('beforeExit', () => {
+  try {
+    db.close();
+  } catch (e) {}
+});
+
+/**
+ * Initialize database schema (all tables)
+ */
+function initDatabase() {
+  console.log('[DB] Using SQLite at:', DB_PATH);
+  
   db.exec(`
-    CREATE TABLE IF NOT EXISTS menu_item_variations (
-      id TEXT PRIMARY KEY,
-      menu_item_id TEXT NOT NULL,
-      type TEXT NOT NULL,
+    CREATE TABLE IF NOT EXISTS super_admins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
       name TEXT NOT NULL,
-      price_modifier REAL DEFAULT 0,
-      is_default INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE TABLE IF NOT EXISTS restaurants (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      owner_name TEXT,
+      phone TEXT UNIQUE NOT NULL,
+      email TEXT,
+      address TEXT,
+      password TEXT NOT NULL,
+      whatsapp_connected INTEGER DEFAULT 0,
+      whatsapp_phone TEXT,
+      is_active INTEGER DEFAULT 1,
+      currency TEXT DEFAULT 'Rs.',
+      delivery_fee_default REAL DEFAULT 100,
+      min_order_amount REAL DEFAULT 0,
+      logo_url TEXT,
+      tax_percentage REAL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE TABLE IF NOT EXISTS menu_categories (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
       is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
+    );
+    
+    CREATE TABLE IF NOT EXISTS menu_items (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      category_id TEXT,
+      name TEXT NOT NULL,
+      description TEXT,
+      price REAL NOT NULL,
+      is_available INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE,
+      FOREIGN KEY (category_id) REFERENCES menu_categories(id) ON DELETE SET NULL
+    );
+    
+    CREATE TABLE IF NOT EXISTS customers (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      name TEXT,
+      address TEXT,
+      total_orders INTEGER DEFAULT 0,
+      total_spent REAL DEFAULT 0,
+      first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(restaurant_id, phone),
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
+    );
+    
+    CREATE TABLE IF NOT EXISTS orders (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      customer_id TEXT NOT NULL,
+      customer_phone TEXT NOT NULL,
+      customer_name TEXT,
+      customer_address TEXT,
+      order_type TEXT DEFAULT 'delivery',
+      items_json TEXT NOT NULL,
+      subtotal REAL NOT NULL,
+      delivery_fee REAL DEFAULT 0,
+      total REAL NOT NULL,
+      status TEXT DEFAULT 'new',
+      notes TEXT,
+      whatsapp_message_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE,
+      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+    );
+    
+    CREATE TABLE IF NOT EXISTS order_status_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      note TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    );
+    
+    CREATE TABLE IF NOT EXISTS bot_conversations (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      customer_phone TEXT NOT NULL,
+      state TEXT DEFAULT 'idle',
+      cart_json TEXT DEFAULT '[]',
+      order_type TEXT,
+      notes TEXT,
+      last_message_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(restaurant_id, customer_phone),
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
     );
     
     CREATE TABLE IF NOT EXISTS deals (
@@ -128,6 +257,24 @@ function ensureV2Tables() {
       FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
     );
     
+    CREATE TABLE IF NOT EXISTS menu_item_variations (
+      id TEXT PRIMARY KEY,
+      menu_item_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      price_modifier REAL DEFAULT 0,
+      is_default INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_orders_restaurant ON orders(restaurant_id);
+    CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+    CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);
+    CREATE INDEX IF NOT EXISTS idx_menu_items_restaurant ON menu_items(restaurant_id);
+    CREATE INDEX IF NOT EXISTS idx_customers_restaurant ON customers(restaurant_id);
+    CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
     CREATE INDEX IF NOT EXISTS idx_menu_variations_item ON menu_item_variations(menu_item_id);
     CREATE INDEX IF NOT EXISTS idx_deals_restaurant ON deals(restaurant_id);
     CREATE INDEX IF NOT EXISTS idx_operating_hours_restaurant ON operating_hours(restaurant_id);
@@ -135,170 +282,6 @@ function ensureV2Tables() {
     CREATE INDEX IF NOT EXISTS idx_feedback_restaurant ON customer_feedback(restaurant_id);
     CREATE INDEX IF NOT EXISTS idx_broadcasts_restaurant ON broadcasts(restaurant_id);
     CREATE INDEX IF NOT EXISTS idx_reservations_restaurant ON reservations(restaurant_id);
-  `);
-  
-  // Add columns to restaurants table (idempotent)
-  const columns = [
-    { name: 'currency', type: 'TEXT', default: "'Rs.'" },
-    { name: 'delivery_fee_default', type: 'REAL', default: '100' },
-    { name: 'min_order_amount', type: 'REAL', default: '0' },
-    { name: 'logo_url', type: 'TEXT', default: null },
-    { name: 'tax_percentage', type: 'REAL', default: '0' }
-  ];
-  
-  columns.forEach(col => {
-    try {
-      if (col.default) {
-        db.exec(`ALTER TABLE restaurants ADD COLUMN ${col.name} ${col.type} DEFAULT ${col.default};`);
-      } else {
-        db.exec(`ALTER TABLE restaurants ADD COLUMN ${col.name} ${col.type};`);
-      }
-      console.log(`[DB] Added column ${col.name} to restaurants`);
-    } catch (e) {
-      // Column already exists - ignore
-    }
-  });
-}
-
-/**
- * Initialize database schema
- */
-function initDatabase() {
-  // Super admins (system-wide admins)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS super_admins (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
-      name TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  // Restaurants (multi-tenant)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS restaurants (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      owner_name TEXT,
-      phone TEXT UNIQUE NOT NULL,
-      email TEXT,
-      address TEXT,
-      password TEXT NOT NULL,
-      whatsapp_connected INTEGER DEFAULT 0,
-      whatsapp_phone TEXT,
-      is_active INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  // Menu categories
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS menu_categories (
-      id TEXT PRIMARY KEY,
-      restaurant_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      sort_order INTEGER DEFAULT 0,
-      is_active INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
-    );
-  `);
-
-  // Menu items
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS menu_items (
-      id TEXT PRIMARY KEY,
-      restaurant_id TEXT NOT NULL,
-      category_id TEXT,
-      name TEXT NOT NULL,
-      description TEXT,
-      price REAL NOT NULL,
-      is_available INTEGER DEFAULT 1,
-      sort_order INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE,
-      FOREIGN KEY (category_id) REFERENCES menu_categories(id) ON DELETE SET NULL
-    );
-  `);
-
-  // Customers (per restaurant)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS customers (
-      id TEXT PRIMARY KEY,
-      restaurant_id TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      name TEXT,
-      address TEXT,
-      total_orders INTEGER DEFAULT 0,
-      total_spent REAL DEFAULT 0,
-      first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-      last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(restaurant_id, phone),
-      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
-    );
-  `);
-
-  // Orders
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS orders (
-      id TEXT PRIMARY KEY,
-      restaurant_id TEXT NOT NULL,
-      customer_id TEXT NOT NULL,
-      customer_phone TEXT NOT NULL,
-      customer_name TEXT,
-      customer_address TEXT,
-      order_type TEXT DEFAULT 'delivery', -- delivery, pickup
-      items_json TEXT NOT NULL, -- JSON array of {name, qty, price}
-      subtotal REAL NOT NULL,
-      delivery_fee REAL DEFAULT 0,
-      total REAL NOT NULL,
-      status TEXT DEFAULT 'new', -- new, confirmed, preparing, ready, delivered, cancelled
-      notes TEXT,
-      whatsapp_message_id TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE,
-      FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-    );
-  `);
-
-  // Order status history
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS order_status_history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      order_id TEXT NOT NULL,
-      status TEXT NOT NULL,
-      note TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
-    );
-  `);
-
-  // Bot conversation state (per customer per restaurant)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS bot_conversations (
-      id TEXT PRIMARY KEY,
-      restaurant_id TEXT NOT NULL,
-      customer_phone TEXT NOT NULL,
-      state TEXT DEFAULT 'idle', -- idle, ordering, awaiting_name, awaiting_address, awaiting_confirmation
-      cart_json TEXT DEFAULT '[]',
-      order_type TEXT,
-      last_message_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(restaurant_id, customer_phone),
-      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
-    );
-  `);
-
-  // Create indexes for performance
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_orders_restaurant ON orders(restaurant_id);
-    CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
-    CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);
-    CREATE INDEX IF NOT EXISTS idx_menu_items_restaurant ON menu_items(restaurant_id);
-    CREATE INDEX IF NOT EXISTS idx_customers_restaurant ON customers(restaurant_id);
-    CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
   `);
 
   // Seed super admin if not exists
@@ -314,10 +297,6 @@ function initDatabase() {
   }
 
   console.log('[DB] Database initialized successfully');
-  
-  // Ensure V2 tables exist (deals, hours, delivery areas, etc.)
-  ensureV2Tables();
-  console.log('[DB] V2 tables verified');
 }
 
 // Helper for generating IDs

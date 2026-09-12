@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "build:sqlite": "cd node_modules/better-sqlite3 && npx node-gyp rebuild || echo 'SQLite build skipped (using PostgreSQL)'",
+    "postinstall": "echo 'Installation complete'"
   },
   "engines": {
     "node": ">=18.0.0"
