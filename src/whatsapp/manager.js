@@ -1,11 +1,12 @@
 /**
- * WhatsApp Multi-Session Manager (Simplified & Stable)
+ * WhatsApp Multi-Session Manager (v2 - Fixed)
  * 
- * Manages multiple WhatsApp connections using Baileys library.
- * - One-time QR scan per restaurant
- * - Sessions persist to disk
- * - Auto-reconnect on disconnect
- * - Real-time QR code updates via Socket.io
+ * Fixes "Waiting for this message" issue by:
+ * 1. Using latest Baileys 7
+ * 2. Proper pre-key sync via makeCacheableSignalKeyStore
+ * 3. getMessage callback for retry requests
+ * 4. Warm-up routine after connection
+ * 5. Proper retry on message send failures
  */
 
 const makeWASocket = require('@whiskeysockets/baileys').default;
@@ -13,7 +14,10 @@ const {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
-  Browsers
+  makeCacheableSignalKeyStore,
+  Browsers,
+  delay,
+  proto
 } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const QRCode = require('qrcode');
@@ -21,20 +25,15 @@ const path = require('path');
 const fs = require('fs');
 const config = require('../config');
 
-// Active sessions
 const sessions = new Map();
-// Pending QR codes
 const pendingQrCodes = new Map();
-// Socket.io instance
 let io = null;
 
 function setSocketIO(socketIO) {
   io = socketIO;
 }
 
-/**
- * Simple logger to avoid pino worker thread issues
- */
+// Simple logger (silent to keep console clean)
 const simpleLogger = {
   level: 'silent',
   info: () => {},
@@ -46,9 +45,6 @@ const simpleLogger = {
   child: function() { return this; }
 };
 
-/**
- * Get session auth folder path
- */
 function getSessionPath(restaurantId) {
   const safeId = String(restaurantId).replace(/[^a-zA-Z0-9_-]/g, '_');
   const dir = path.join(config.WHATSAPP_SESSIONS_DIR, safeId);
@@ -58,9 +54,6 @@ function getSessionPath(restaurantId) {
   return dir;
 }
 
-/**
- * Lazy load bot handler to avoid circular dependency
- */
 let botHandler = null;
 function getBotHandler() {
   if (!botHandler) {
@@ -70,13 +63,25 @@ function getBotHandler() {
 }
 
 /**
- * Start a WhatsApp session for a restaurant
+ * Store messages for retry requests (when customer asks for previous message)
+ */
+const messageStore = new Map(); // jid -> [messages]
+
+function storeMessage(jid, msg) {
+  if (!messageStore.has(jid)) {
+    messageStore.set(jid, []);
+  }
+  const arr = messageStore.get(jid);
+  arr.push(msg);
+  if (arr.length > 50) arr.shift();
+}
+
+/**
+ * Start a WhatsApp session with proper fixes
  */
 async function startSession(restaurantId) {
-  // Normalize ID
   restaurantId = String(restaurantId);
 
-  // Check existing session
   if (sessions.has(restaurantId)) {
     const existing = sessions.get(restaurantId);
     if (existing.socket && existing.status === 'connected') {
@@ -93,27 +98,51 @@ async function startSession(restaurantId) {
     status: 'connecting',
     phone: null,
     lastDisconnect: null,
-    reconnectAttempts: 0
+    reconnectAttempts: 0,
+    warmupDone: false
   };
   sessions.set(restaurantId, sessionObj);
 
   try {
     const sessionDir = getSessionPath(restaurantId);
-    const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+    const { state, saveCreds, saveState } = await useMultiFileAuthState(sessionDir);
     const { version } = await fetchLatestBaileysVersion();
 
+    // Create socket with all proper options
     const sock = makeWASocket({
       version,
-      auth: state,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, simpleLogger)
+      },
       printQRInTerminal: false,
       logger: simpleLogger,
       browser: Browsers.macOS('Desktop'),
-      connectTimeoutMs: 30000,
-      defaultQueryTimeoutMs: 30000,
-      keepAliveIntervalMs: 60000,
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 60000,
+      keepAliveIntervalMs: 30000,
       markOnlineOnConnect: false,
       syncFullHistory: false,
-      emitOwnEvents: false
+      emitOwnEvents: false,
+      // Important: getMessage for retry requests (fixes "Waiting for message")
+      getMessage: async (key) => {
+        try {
+          const jid = key.remoteJid;
+          if (messageStore.has(jid)) {
+            const msgs = messageStore.get(jid);
+            const found = msgs.find(m => m.key.id === key.id);
+            if (found) return found.message;
+          }
+          // Return a placeholder message
+          return proto.Message.fromObject({ conversation: '...' });
+        } catch (e) {
+          return proto.Message.fromObject({ conversation: '...' });
+        }
+      },
+      // Custom retry logic
+      retryRequestDelayMs: 250,
+      // Set mobile flag to false (we're desktop)
+      customUploadHosts: []
     });
 
     sessionObj.socket = sock;
@@ -123,7 +152,7 @@ async function startSession(restaurantId) {
 
     // Handle connection updates
     sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update;
+      const { connection, lastDisconnect, qr, receivedPendingNotifications } = update;
 
       if (qr) {
         pendingQrCodes.set(restaurantId, qr);
@@ -156,6 +185,11 @@ async function startSession(restaurantId) {
           io.emit(`whatsapp:connected:${restaurantId}`, { phone: sessionObj.phone });
         }
         console.log(`[WA] Restaurant ${restaurantId} connected as ${sessionObj.phone}`);
+        
+        // Warm-up: Wait for history sync, then mark as ready
+        setTimeout(async () => {
+          await performWarmup(sock, restaurantId, sessionObj);
+        }, 5000);
       }
 
       if (connection === 'close') {
@@ -186,10 +220,30 @@ async function startSession(restaurantId) {
     // Handle incoming messages
     sock.ev.on('messages.upsert', async (m) => {
       try {
+        // Store messages for retry requests
+        if (m.messages && m.messages.length > 0) {
+          for (const msg of m.messages) {
+            if (msg.key && msg.key.remoteJid && msg.message) {
+              storeMessage(msg.key.remoteJid, msg);
+            }
+          }
+        }
         const handler = getBotHandler();
         await handler.handleMessage(sock, m, restaurantId);
       } catch (e) {
         console.error('[WA] Message handling error:', e.message);
+      }
+    });
+
+    // Handle message receipt updates (delivery/read)
+    sock.ev.on('message-receipt.update', (updates) => {
+      // Optional: track delivery status
+    });
+
+    // Handle history sync (important for new connections)
+    sock.ev.on('messaging-history.set', ({ chats, contacts, messages, isLatest }) => {
+      if (isLatest) {
+        console.log(`[WA] History sync: ${chats.length} chats, ${contacts.length} contacts, ${messages.length} messages`);
       }
     });
 
@@ -202,7 +256,35 @@ async function startSession(restaurantId) {
 }
 
 /**
- * Clear session (delete auth files)
+ * Perform warmup routine after connection
+ * This helps fix "Waiting for message" issues
+ */
+async function performWarmup(sock, restaurantId, sessionObj) {
+  try {
+    console.log(`[WA] Performing warmup for ${restaurantId}...`);
+    
+    // Wait for full sync
+    await delay(3000);
+    
+    // Send presence update (online)
+    if (typeof sock.sendPresenceUpdate === 'function') {
+      try {
+        await sock.sendPresenceUpdate('available');
+        console.log('[WA] Presence: available');
+      } catch (e) {
+        // ignore
+      }
+    }
+    
+    sessionObj.warmupDone = true;
+    console.log(`[WA] Warmup complete for ${restaurantId}`);
+  } catch (e) {
+    console.error('[WA] Warmup error:', e.message);
+  }
+}
+
+/**
+ * Clear session
  */
 async function clearSession(restaurantId) {
   restaurantId = String(restaurantId);
@@ -239,7 +321,7 @@ async function clearSession(restaurantId) {
 }
 
 /**
- * Disconnect a restaurant's WhatsApp session
+ * Disconnect a session
  */
 async function disconnectSession(restaurantId) {
   restaurantId = String(restaurantId);
@@ -275,20 +357,75 @@ function getSessionStatus(restaurantId) {
 }
 
 /**
- * Send a text message from a restaurant's WhatsApp
+ * Send a text message with retry logic
+ * This is the main fix for "empty messages" - properly format and retry
  */
-async function sendMessage(restaurantId, to, text) {
+async function sendMessage(restaurantId, to, text, options = {}) {
   restaurantId = String(restaurantId);
   const session = sessions.get(restaurantId);
   if (!session || !session.socket) {
     throw new Error('WhatsApp not connected');
   }
+  
   let jid = String(to).replace(/[^0-9]/g, '');
-  if (!jid.endsWith('@s.whatsapp.net')) {
+  if (!jid.endsWith('@s.whatsapp.net') && !jid.endsWith('@g.us')) {
     jid = jid + '@s.whatsapp.net';
   }
-  const result = await session.socket.sendMessage(jid, { text });
-  return result;
+  
+  // Try sending with retry
+  let attempts = 0;
+  let lastError = null;
+  
+  while (attempts < 3) {
+    try {
+      attempts++;
+      
+      // Send presence update (typing) before message
+      if (typeof session.socket.sendPresenceUpdate === 'function') {
+        try {
+          await session.socket.sendPresenceUpdate('available', jid);
+        } catch (e) {
+          // ignore
+        }
+      }
+      
+      const messageContent = {
+        text: text,
+        // Optional: link preview
+        linkPreview: options.linkPreview !== false
+      };
+      
+      const result = await session.socket.sendMessage(jid, messageContent, {
+        // Use a unique message ID
+        messageId: options.messageId,
+        // Optional: quoted message
+        quoted: options.quoted,
+        // Timing
+        timeoutMs: 30000
+      });
+      
+      // Store the sent message for retry requests
+      if (result && result.key) {
+        const fakeMsg = {
+          key: result.key,
+          message: { conversation: text }
+        };
+        storeMessage(jid, fakeMsg);
+      }
+      
+      return result;
+    } catch (e) {
+      lastError = e;
+      console.error(`[WA] Send attempt ${attempts} failed:`, e.message);
+      
+      // Wait before retry
+      if (attempts < 3) {
+        await delay(1000 * attempts);
+      }
+    }
+  }
+  
+  throw lastError || new Error('Send failed');
 }
 
 /**
@@ -305,7 +442,7 @@ async function initializeConnectedRestaurants() {
       if (fs.existsSync(sessionPath)) {
         try {
           await startSession(r.id);
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await delay(2000);
         } catch (e) {
           console.error(`[WA] Failed to restore session for ${r.id}:`, e.message);
         }

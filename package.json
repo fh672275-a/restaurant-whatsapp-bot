@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "^6.7.7",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.0.0",
     "body-parser": "^1.20.2",
@@ -26,8 +26,8 @@
     "socket.io": "^4.7.5"
   },
   "allowScripts": {
-    "@whiskeysockets/baileys@6.7.24": true,
     "better-sqlite3@11.10.0": true,
-    "protobufjs@7.6.6": true
+    "protobufjs@7.6.6": true,
+    "@whiskeysockets/baileys@7.0.0-rc14": true
   }
 }
