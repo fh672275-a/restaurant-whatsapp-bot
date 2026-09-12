@@ -312,6 +312,130 @@ function extractItemAndQuantity(message, menuItems) {
   return { qty, item: foundItem };
 }
 
+/**
+ * Extract order details (name, phone, address) from natural message
+ * Returns: { name, phone, address, hasAllInfo }
+ */
+async function extractOrderDetails(message) {
+  try {
+    const zai = await getZAI();
+    
+    const completion = await zai.chat.completions.create({
+      messages: [
+        {
+          role: 'assistant',
+          content: `You are a data extractor. Given a customer's message, extract order details.
+Return ONLY valid JSON (no markdown, no code blocks). Format:
+{"name": "extracted name or null", "phone": "extracted phone or null", "address": "extracted address or null"}
+
+Rules:
+- Phone: extract any phone number (10+ digits, may have country code)
+- Name: extract person name (not phone, not address)
+- Address: extract delivery address/location description
+- If not found, use null
+- Return ONLY the JSON, nothing else`
+        },
+        {
+          role: 'user',
+          content: message
+        }
+      ],
+      thinking: { type: 'disabled' },
+      temperature: 0,
+      max_tokens: 200
+    });
+
+    const response = completion.choices[0]?.message?.content?.trim();
+    
+    // Try to parse JSON (handle if wrapped in markdown code blocks)
+    let jsonStr = response;
+    if (jsonStr.includes('```')) {
+      jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    }
+    
+    const details = JSON.parse(jsonStr);
+    return {
+      name: details.name || null,
+      phone: details.phone ? details.phone.replace(/[^0-9]/g, '') : null,
+      address: details.address || null
+    };
+  } catch (error) {
+    console.error('[AI] extractOrderDetails error:', error.message);
+    return { name: null, phone: null, address: null };
+  }
+}
+
+/**
+ * Extract item and quantity from message using AI
+ */
+async function extractOrderItems(message, menuItems) {
+  try {
+    const zai = await getZAI();
+    
+    const menuSummary = menuItems.map(m => `- ${m.name} (Rs. ${m.price})`).join('\n');
+    
+    const completion = await zai.chat.completions.create({
+      messages: [
+        {
+          role: 'assistant',
+          content: `You are an order parser. Given a customer message and a menu, extract what items they want to order.
+
+Return ONLY valid JSON array (no markdown). Format:
+[{"name": "exact menu item name", "qty": 1}]
+
+Rules:
+- Match customer's request to closest menu item
+- Default quantity is 1 if not specified
+- If no items match, return empty array []
+- Return ONLY the JSON, nothing else
+
+Available menu items:
+${menuSummary}`
+        },
+        {
+          role: 'user',
+          content: message
+        }
+      ],
+      thinking: { type: 'disabled' },
+      temperature: 0,
+      max_tokens: 200
+    });
+
+    const response = completion.choices[0]?.message?.content?.trim();
+    
+    let jsonStr = response;
+    if (jsonStr.includes('```')) {
+      jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    }
+    
+    const items = JSON.parse(jsonStr);
+    
+    // Match to actual menu items
+    const matchedItems = [];
+    for (const item of items) {
+      const menuItem = menuItems.find(m => 
+        m.name.toLowerCase() === item.name.toLowerCase() ||
+        m.name.toLowerCase().includes(item.name.toLowerCase()) ||
+        item.name.toLowerCase().includes(m.name.toLowerCase())
+      );
+      if (menuItem) {
+        matchedItems.push({
+          item_id: menuItem.id,
+          name: menuItem.name,
+          price: menuItem.price,
+          qty: Math.min(item.qty || 1, 20)
+        });
+      }
+    }
+    
+    return matchedItems;
+  } catch (error) {
+    console.error('[AI] extractOrderItems error:', error.message);
+    return [];
+  }
+}
+
 module.exports = {
   generateResponse,
   getFallbackResponse,
@@ -319,5 +443,7 @@ module.exports = {
   detectConfirmation,
   detectOrderType,
   extractItemAndQuantity,
+  extractOrderDetails,
+  extractOrderItems,
   buildSystemPrompt
 };

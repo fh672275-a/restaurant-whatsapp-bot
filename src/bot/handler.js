@@ -243,6 +243,24 @@ async function saveOrder(restaurantId, customer, conv) {
     cleanPhone = '0' + cleanPhone;
   }
   
+  return await saveOrderWithDetails(restaurantId, customer, conv, cleanPhone);
+}
+
+async function saveOrderWithDetails(restaurantId, customer, conv, phone) {
+  const cart = JSON.parse(conv.cart_json || '[]');
+  if (cart.length === 0) {
+    console.log('[Bot] Cannot save order - cart is empty');
+    return null;
+  }
+  
+  let cleanPhone = phone;
+  if (cleanPhone.startsWith('92')) {
+    cleanPhone = '0' + cleanPhone.substring(2);
+  }
+  if (!cleanPhone.startsWith('0')) {
+    cleanPhone = '0' + cleanPhone;
+  }
+  
   const subtotal = calculateSubtotal(cart);
   const restaurant = prepare('SELECT * FROM restaurants WHERE id = ?').get(restaurantId);
   const deliveryFee = conv.order_type === 'delivery' ? (restaurant.delivery_fee_default || 100) : 0;
@@ -251,6 +269,19 @@ async function saveOrder(restaurantId, customer, conv) {
   
   const address = conv.notes || null;
   const orderId = _generateId('ord_');
+  
+  console.log('[Bot] Saving order:', {
+    orderId,
+    restaurantId,
+    customerName: customer.name,
+    customerPhone: cleanPhone,
+    address,
+    orderType: conv.order_type,
+    items: cart.length,
+    subtotal,
+    deliveryFee,
+    total
+  });
   
   prepare(`INSERT INTO orders 
     (id, restaurant_id, customer_id, customer_phone, customer_name, customer_address, order_type, items_json, subtotal, delivery_fee, total, status)
@@ -262,6 +293,8 @@ async function saveOrder(restaurantId, customer, conv) {
   prepare('INSERT INTO order_status_history (order_id, status) VALUES (?, ?)').run(orderId, 'new');
   prepare('UPDATE customers SET total_orders = total_orders + 1, total_spent = total_spent + ? WHERE id = ?')
     .run(total, customer.id);
+  
+  console.log('[Bot] Order saved successfully:', orderId);
   
   return { orderId, total, items: cart, subtotal, deliveryFee, taxAmount };
 }
@@ -284,10 +317,15 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
                        '';
 
     const text = (conversation || '').trim();
-    const phone = String(msg.key.remoteJid || '').split('@')[0];
+    let phone = String(msg.key.remoteJid || '').split('@')[0];
+    
+    // Handle LID (WhatsApp privacy feature) - try to resolve to actual phone
+    // If it's a LID (starts with non-92 number), we'll use the LID for tracking
+    // but try to extract phone from messages later
+    const isLID = msg.key.remoteJid && msg.key.remoteJid.endsWith('@lid');
+    console.log(`[Bot] From ${phone}${isLID ? ' (LID)' : ''}: "${text}"`);
+    
     if (!phone || !text) return;
-
-    console.log(`[Bot] From ${phone}: "${text}"`);
 
     const restaurant = prepare('SELECT * FROM restaurants WHERE id = ?').get(restaurantId);
     if (!restaurant || !restaurant.is_active) return;
@@ -434,14 +472,49 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
         break;
 
       case 'awaiting_name':
-        if (text.trim().length > 0) {
+        // Use AI to extract name, phone, address from the message
+        // Customer might send everything at once
+        const details1 = await aiAgent.extractOrderDetails(text);
+        console.log('[Bot] Extracted details (awaiting_name):', details1);
+        
+        if (details1.name) {
+          prepare('UPDATE customers SET name = ? WHERE id = ?').run(details1.name, customer.id);
+          customer.name = details1.name;
+        }
+        
+        if (details1.address) {
+          prepare('UPDATE bot_conversations SET notes = ? WHERE id = ?').run(details1.address, conv.id);
+        }
+        
+        if (details1.phone && details1.phone.length >= 10) {
+          // Customer provided phone too! Use it directly
+          let cleanPhone = details1.phone;
+          if (cleanPhone.startsWith('92')) cleanPhone = '0' + cleanPhone.substring(2);
+          if (!cleanPhone.startsWith('0')) cleanPhone = '0' + cleanPhone;
+          
+          // Skip to confirmation - we have everything!
+          const orderResult = await saveOrderWithDetails(restaurantId, customer, conv, cleanPhone);
+          if (orderResult) {
+            updateConversation(restaurantId, phone, { 
+              state: 'awaiting_confirmation',
+              cart_json: JSON.stringify({ orderId: orderResult.orderId })
+            });
+            aiContext.conversationState = 'awaiting_confirmation';
+            aiContext.cart = orderResult.items;
+            aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
+          }
+        } else if (details1.address) {
+          // Customer provided name + address, still need phone
+          updateConversation(restaurantId, phone, { state: 'awaiting_phone' });
+          aiContext.conversationState = 'awaiting_phone';
+          aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
+        } else {
+          // Just name provided
           updateConversation(restaurantId, phone, { state: 'awaiting_address' });
-          prepare('UPDATE customers SET name = ? WHERE id = ?').run(text.trim(), customer.id);
           aiContext.conversationState = 'awaiting_address';
           if (conv.order_type === 'delivery') {
             aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
           } else {
-            // Pickup - skip address, go to phone
             updateConversation(restaurantId, phone, { state: 'awaiting_phone' });
             aiContext.conversationState = 'awaiting_phone';
             aiResponse = 'Phone number bata dijiye delivery confirmation k liye. 📱';
@@ -450,19 +523,49 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
         break;
 
       case 'awaiting_address':
-        if (text.trim().length > 0) {
+        // Use AI to extract address (and maybe phone)
+        const details2 = await aiAgent.extractOrderDetails(text);
+        console.log('[Bot] Extracted details (awaiting_address):', details2);
+        
+        if (details2.address) {
+          prepare('UPDATE bot_conversations SET notes = ? WHERE id = ?').run(details2.address, conv.id);
+        }
+        
+        if (details2.phone && details2.phone.length >= 10) {
+          // Phone also provided! Save order
+          let cleanPhone = details2.phone;
+          if (cleanPhone.startsWith('92')) cleanPhone = '0' + cleanPhone.substring(2);
+          if (!cleanPhone.startsWith('0')) cleanPhone = '0' + cleanPhone;
+          
+          const orderResult = await saveOrderWithDetails(restaurantId, customer, conv, cleanPhone);
+          if (orderResult) {
+            updateConversation(restaurantId, phone, { 
+              state: 'awaiting_confirmation',
+              cart_json: JSON.stringify({ orderId: orderResult.orderId })
+            });
+            aiContext.conversationState = 'awaiting_confirmation';
+            aiContext.cart = orderResult.items;
+            aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
+          }
+        } else {
           updateConversation(restaurantId, phone, { state: 'awaiting_phone' });
-          prepare('UPDATE bot_conversations SET notes = ? WHERE id = ?').run(text.trim(), conv.id);
           aiContext.conversationState = 'awaiting_phone';
           aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
         }
         break;
 
       case 'awaiting_phone':
-        const cleanPhone = text.replace(/[^0-9]/g, '');
-        if (cleanPhone.length >= 10) {
-          // Save order and show confirmation
-          const orderResult = await saveOrder(restaurantId, customer, conv);
+        // Use AI to extract phone
+        const details3 = await aiAgent.extractOrderDetails(text);
+        console.log('[Bot] Extracted details (awaiting_phone):', details3);
+        
+        const phoneInput = details3.phone || text.replace(/[^0-9]/g, '');
+        if (phoneInput && phoneInput.length >= 10) {
+          let cleanPhone = phoneInput;
+          if (cleanPhone.startsWith('92')) cleanPhone = '0' + cleanPhone.substring(2);
+          if (!cleanPhone.startsWith('0')) cleanPhone = '0' + cleanPhone;
+          
+          const orderResult = await saveOrderWithDetails(restaurantId, customer, conv, cleanPhone);
           if (orderResult) {
             updateConversation(restaurantId, phone, { 
               state: 'awaiting_confirmation',
