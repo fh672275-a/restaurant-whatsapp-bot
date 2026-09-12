@@ -1,9 +1,4 @@
 [DB] Database initialized successfully
-[DB] Added column currency to restaurants
-[DB] Added column delivery_fee_default to restaurants
-[DB] Added column min_order_amount to restaurants
-[DB] Added column logo_url to restaurants
-[DB] Added column tax_percentage to restaurants
 [DB] V2 tables verified
 =================================================
   Restaurant WhatsApp Bot System
@@ -18,3 +13,18 @@
 [Startup] All sessions restored.
 
 ✅ System ready! Open dashboard and connect a restaurant WhatsApp.
+
+  #  node[4668]: void node::RemoveEnvironmentCleanupHook(v8::Isolate*, CleanupHook, void*) at ../src/api/hooks.cc:142
+  #  Assertion failed: (env) != nullptr
+
+----- Native stack trace -----
+
+ 1: 0x921e57 node::Assert(node::AssertionInfo const&) [node]
+ 2: 0x80969b node::RemoveEnvironmentCleanupHook(v8::Isolate*, void (*)(void*), void*) [node]
+ 3: 0x7fa1f97345f9 Statement::~Statement() [/home/z/my-project/node_modules/better-sqlite3/build/Release/better_sqlite3.node]
+ 4: 0x7fa1f9734701 Statement::~Statement() [/home/z/my-project/node_modules/better-sqlite3/build/Release/better_sqlite3.node]
+ 5: 0xe53ccd  [node]
+ 6: 0xf065f4  [node]
+ 7: 0xf075e9  [node]
+ 8: 0xf0ba60  [node]
+ 9: 0x199e0d1  [node]
