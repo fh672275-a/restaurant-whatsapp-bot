@@ -1,19 +1,15 @@
 /**
- * AI-Powered Bot Message Handler
+ * AI-First Bot Message Handler (Fully Autonomous)
  * 
- * Uses LLM (z-ai-web-dev-sdk) for natural, human-like conversations.
- * The AI handles ALL messages naturally - no limited commands!
- * 
- * Flow:
- * 1. AI generates natural response to ANY customer message
- * 2. AI can detect order intent and trigger order flow
- * 3. State machine still handles structured order collection
- * 4. AI responses are conversational and contextual
+ * NO rigid state machine! AI decides what to do:
+ * 1. AI parses message and extracts: items, delivery type, name, phone, address
+ * 2. If customer wants to order + provides all info → save order directly
+ * 3. If customer provides partial info → ask for missing
+ * 4. AI handles all chat naturally
  */
 
 const aiAgent = require('./ai-agent');
 
-// Lazy-loaded modules
 let _db = null;
 let _waManager = null;
 let _generateId = null;
@@ -43,8 +39,7 @@ function prepare(sql) {
   return stmtCache.get(sql);
 }
 
-// Conversation history cache (per customer per restaurant)
-const conversationHistory = new Map(); // key: restaurantId:phone -> [{role, content}]
+const conversationHistory = new Map();
 
 function getHistoryKey(restaurantId, phone) {
   return `${restaurantId}:${phone}`;
@@ -61,13 +56,12 @@ function getConversationHistory(restaurantId, phone) {
 function addToHistory(restaurantId, phone, role, content) {
   const history = getConversationHistory(restaurantId, phone);
   history.push({ role, content });
-  // Keep only last 20 messages
   if (history.length > 20) {
     history.shift();
   }
 }
 
-// ==================== HELPER FUNCTIONS ====================
+// ==================== HELPERS ====================
 
 function getOrCreateCustomer(restaurantId, phone, name) {
   const selectStmt = prepare('SELECT * FROM customers WHERE restaurant_id = ? AND phone = ?');
@@ -110,7 +104,6 @@ function calculateSubtotal(cart) {
 function getRestaurantContext(restaurantId) {
   const restaurant = prepare('SELECT * FROM restaurants WHERE id = ?').get(restaurantId);
   
-  // Operating hours check
   const now = new Date();
   const dayOfWeek = now.getDay();
   const currentTime = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
@@ -128,7 +121,6 @@ function getRestaurantContext(restaurantId) {
     }
   }
   
-  // Menu items with categories
   const menuItems = prepare(`
     SELECT mi.*, mc.name as category_name 
     FROM menu_items mi 
@@ -137,7 +129,6 @@ function getRestaurantContext(restaurantId) {
     ORDER BY mc.sort_order, mi.sort_order, mi.name
   `).all(restaurantId);
   
-  // Active deals
   const deals = prepare(`
     SELECT * FROM deals WHERE restaurant_id = ? AND is_active = 1 
     AND (valid_from IS NULL OR valid_from <= datetime('now'))
@@ -145,21 +136,10 @@ function getRestaurantContext(restaurantId) {
     ORDER BY sort_order
   `).all(restaurantId);
   
-  // All operating hours
   const allHours = prepare('SELECT * FROM operating_hours WHERE restaurant_id = ? ORDER BY day_of_week').all(restaurantId);
-  
-  // Delivery areas
   const deliveryAreas = prepare('SELECT * FROM delivery_areas WHERE restaurant_id = ? AND is_active = 1').all(restaurantId);
   
-  return {
-    restaurant,
-    isOpen,
-    closingTime,
-    menuItems,
-    deals,
-    operatingHours: allHours,
-    deliveryAreas
-  };
+  return { restaurant, isOpen, closingTime, menuItems, deals, operatingHours: allHours, deliveryAreas };
 }
 
 function getCustomerContext(restaurantId, customer) {
@@ -170,16 +150,12 @@ function getCustomerContext(restaurantId, customer) {
     ORDER BY created_at DESC LIMIT 5
   `).all(restaurantId, customer.id);
   
-  const orderCount = recentOrders.length;
-  
   return {
     recentOrders,
-    isVIP: orderCount >= 10,
-    isReturning: orderCount > 0
+    isVIP: recentOrders.length >= 10,
+    isReturning: recentOrders.length > 0
   };
 }
-
-// ==================== MESSAGE SENDING ====================
 
 async function sendTextWithDelay(sock, jid, text) {
   try {
@@ -210,96 +186,75 @@ async function sendTextWithDelay(sock, jid, text) {
   }
 }
 
-// ==================== ORDER FLOW HELPERS ====================
+// ==================== ORDER SAVING ====================
 
-function extractItemFromMessage(message, menuItems) {
-  return aiAgent.extractItemAndQuantity(message, menuItems);
-}
-
-function addToCart(cart, menuItem, qty) {
-  const existing = cart.find(c => c.item_id === menuItem.id);
-  if (existing) {
-    existing.qty += qty;
-  } else {
-    cart.push({
-      item_id: menuItem.id,
-      name: menuItem.name,
-      price: menuItem.price,
-      qty: qty
-    });
-  }
-  return cart;
-}
-
-async function saveOrder(restaurantId, customer, conv) {
-  const cart = JSON.parse(conv.cart_json || '[]');
-  if (cart.length === 0) return null;
-  
-  let cleanPhone = customer.phone;
-  if (cleanPhone.startsWith('92')) {
-    cleanPhone = '0' + cleanPhone.substring(2);
-  }
-  if (!cleanPhone.startsWith('0')) {
-    cleanPhone = '0' + cleanPhone;
-  }
-  
-  return await saveOrderWithDetails(restaurantId, customer, conv, cleanPhone);
-}
-
-async function saveOrderWithDetails(restaurantId, customer, conv, phone) {
-  const cart = JSON.parse(conv.cart_json || '[]');
-  if (cart.length === 0) {
-    console.log('[Bot] Cannot save order - cart is empty');
+async function saveOrder(restaurantId, customer, cart, orderType, phone, address) {
+  if (!cart || cart.length === 0) {
+    console.log('[Bot] Cannot save order - cart empty');
     return null;
   }
   
-  let cleanPhone = phone;
+  let cleanPhone = phone || customer.phone || '';
   if (cleanPhone.startsWith('92')) {
     cleanPhone = '0' + cleanPhone.substring(2);
   }
-  if (!cleanPhone.startsWith('0')) {
+  if (cleanPhone && !cleanPhone.startsWith('0')) {
     cleanPhone = '0' + cleanPhone;
+  }
+  
+  if (!cleanPhone || cleanPhone.length < 10) {
+    console.log('[Bot] Cannot save order - invalid phone:', cleanPhone);
+    return null;
   }
   
   const subtotal = calculateSubtotal(cart);
   const restaurant = prepare('SELECT * FROM restaurants WHERE id = ?').get(restaurantId);
-  const deliveryFee = conv.order_type === 'delivery' ? (restaurant.delivery_fee_default || 100) : 0;
+  const deliveryFee = orderType === 'delivery' ? (restaurant.delivery_fee_default || 100) : 0;
   const taxAmount = restaurant.tax_percentage ? (subtotal * restaurant.tax_percentage / 100) : 0;
   const total = subtotal + deliveryFee + taxAmount;
   
-  const address = conv.notes || null;
   const orderId = _generateId('ord_');
   
-  console.log('[Bot] Saving order:', {
-    orderId,
-    restaurantId,
-    customerName: customer.name,
-    customerPhone: cleanPhone,
-    address,
-    orderType: conv.order_type,
-    items: cart.length,
-    subtotal,
-    deliveryFee,
-    total
-  });
+  console.log('[Bot] === SAVING ORDER ===');
+  console.log('[Bot] Order ID:', orderId);
+  console.log('[Bot] Customer:', customer.name, '|', cleanPhone);
+  console.log('[Bot] Address:', address);
+  console.log('[Bot] Type:', orderType);
+  console.log('[Bot] Items:', cart.length, '| Subtotal:', subtotal, '| Delivery:', deliveryFee, '| Total:', total);
   
   prepare(`INSERT INTO orders 
     (id, restaurant_id, customer_id, customer_phone, customer_name, customer_address, order_type, items_json, subtotal, delivery_fee, total, status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')`).run(
     orderId, restaurantId, customer.id, cleanPhone, customer.name, address,
-    conv.order_type, JSON.stringify(cart), subtotal, deliveryFee, total
+    orderType, JSON.stringify(cart), subtotal, deliveryFee, total
   );
   
   prepare('INSERT INTO order_status_history (order_id, status) VALUES (?, ?)').run(orderId, 'new');
   prepare('UPDATE customers SET total_orders = total_orders + 1, total_spent = total_spent + ? WHERE id = ?')
     .run(total, customer.id);
   
-  console.log('[Bot] Order saved successfully:', orderId);
+  console.log('[Bot] ✅ Order saved:', orderId);
+  
+  // Notify dashboard
+  try {
+    if (global.socketIO) {
+      global.socketIO.emit(`restaurant:new_order:${restaurantId}`, {
+        orderId,
+        total,
+        customer_name: customer.name,
+        customer_phone: cleanPhone,
+        items: cart
+      });
+      console.log('[Bot] ✅ Dashboard notified');
+    }
+  } catch (e) {
+    console.error('[Bot] Socket emit error:', e.message);
+  }
   
   return { orderId, total, items: cart, subtotal, deliveryFee, taxAmount };
 }
 
-// ==================== MAIN MESSAGE HANDLER ====================
+// ==================== MAIN HANDLER (AI-FIRST) ====================
 
 async function handleMessage(sock, messageUpsert, restaurantId) {
   try {
@@ -319,13 +274,11 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
     const text = (conversation || '').trim();
     let phone = String(msg.key.remoteJid || '').split('@')[0];
     
-    // Handle LID (WhatsApp privacy feature) - try to resolve to actual phone
-    // If it's a LID (starts with non-92 number), we'll use the LID for tracking
-    // but try to extract phone from messages later
-    const isLID = msg.key.remoteJid && msg.key.remoteJid.endsWith('@lid');
-    console.log(`[Bot] From ${phone}${isLID ? ' (LID)' : ''}: "${text}"`);
-    
     if (!phone || !text) return;
+
+    console.log(`[Bot] ========== NEW MESSAGE ==========`);
+    console.log(`[Bot] From: ${phone}`);
+    console.log(`[Bot] Message: "${text}"`);
 
     const restaurant = prepare('SELECT * FROM restaurants WHERE id = ?').get(restaurantId);
     if (!restaurant || !restaurant.is_active) return;
@@ -339,23 +292,12 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
 
     let conv = getOrCreateConversation(restaurantId, phone);
     
-    // Session timeout check
-    const lastMsgTime = new Date(conv.last_message_at || Date.now()).getTime();
-    const now = Date.now();
-    const minutesSinceLast = (now - lastMsgTime) / 60000;
-    
-    if (minutesSinceLast > 30 && conv.state !== 'idle') {
-      updateConversation(restaurantId, phone, { state: 'idle', cart_json: '[]', order_type: null });
-      conv = getOrCreateConversation(restaurantId, phone);
-    }
-
-    // Get context for AI
+    // Get contexts
     const restCtx = getRestaurantContext(restaurantId);
     const custCtx = getCustomerContext(restaurantId, customer);
-    const cart = JSON.parse(conv.cart_json || '[]');
+    let cart = JSON.parse(conv.cart_json || '[]');
     const history = getConversationHistory(restaurantId, phone);
 
-    // Build context object for AI
     const aiContext = {
       menuItems: restCtx.menuItems,
       deals: restCtx.deals,
@@ -366,277 +308,188 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
       recentOrders: custCtx.recentOrders,
       isVIP: custCtx.isVIP,
       isReturning: custCtx.isReturning,
-      conversationState: conv.state,
       cart: cart,
       conversationHistory: history
     };
 
-    // Handle based on conversation state
+    // ===== AI PARSES THE MESSAGE =====
+    console.log('[Bot] Parsing message with AI...');
+    const parsed = await aiAgent.parseCustomerMessage(text, restCtx.menuItems, cart);
+    console.log('[Bot] Parsed:', JSON.stringify(parsed, null, 2));
+
     let aiResponse = '';
-    let shouldUpdateHistory = true;
+    let orderSaved = false;
 
-    // Check for cancel command (works in any state)
-    if (text.toLowerCase().match(/^(cancel|cancel karo|cancel kar do|rok do|nahi chahiye)/)) {
-      updateConversation(restaurantId, phone, { state: 'idle', cart_json: '[]', order_type: null, notes: null });
-      aiResponse = 'Theek hai, order cancel kar diya. 🙏\n\nKuch aur chahiye toh bataiye!';
-      await sendTextWithDelay(sock, msg.key.remoteJid, aiResponse);
-      addToHistory(restaurantId, phone, 'user', text);
-      addToHistory(restaurantId, phone, 'assistant', aiResponse);
-      return;
+    // ===== HANDLE BASED ON AI DECISION =====
+
+    // 1. CANCEL
+    if (parsed.wants_to_cancel || parsed.action === 'cancel') {
+      updateConversation(restaurantId, phone, { 
+        state: 'idle', cart_json: '[]', order_type: null, notes: null 
+      });
+      aiResponse = 'Theek hai, order cancel kar diya. 🙏\nKuch aur chahiye toh bataiye!';
     }
 
-    // Handle different states
-    switch (conv.state) {
-      case 'idle':
-        // Check if customer wants to order
-        if (aiAgent.detectOrderIntent(text) && restCtx.isOpen) {
-          // Try to extract item
-          const { qty, item } = extractItemFromMessage(text, restCtx.menuItems);
-          if (item) {
-            // Add to cart and start ordering
-            const newCart = addToCart(cart, item, qty);
-            updateConversation(restaurantId, phone, { state: 'ordering', cart_json: JSON.stringify(newCart) });
-            aiContext.cart = newCart;
-            aiContext.conversationState = 'ordering';
-          }
-        }
-        
-        // Generate AI response for any message
-        aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-        break;
-
-      case 'ordering':
-        // Check if customer wants to checkout
-        if (text.toLowerCase().match(/^(done|ho gaya|bas itna|finish|complete|checkout|bas kafi|theek hai bas)/)) {
-          if (cart.length === 0) {
-            aiResponse = 'Aap ka cart khaali hai! Pehle kuch add karein. 😊';
-          } else {
-            updateConversation(restaurantId, phone, { state: 'awaiting_order_type' });
-            aiContext.conversationState = 'awaiting_order_type';
-            aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-          }
-        } else if (text.toLowerCase() === 'cart' || text.toLowerCase().includes('cart dekho')) {
-          // Show cart
-          let cartMsg = `Aap ka Cart 🛒\n\n`;
-          cart.forEach((item, i) => {
-            cartMsg += `${i + 1}. ${item.qty}x ${item.name} - Rs. ${item.qty * item.price}\n`;
-          });
-          cartMsg += `\nSubtotal: Rs. ${calculateSubtotal(cart)}\n\nOrder complete karne k liye "done" likhein!`;
-          aiResponse = cartMsg;
-        } else if (text.toLowerCase().match(/^(remove|hata|hatao|nikal)/)) {
-          // Try to remove item
-          const itemName = text.toLowerCase().replace(/^(remove|hata|hatao|nikal)\s*/i, '').trim();
-          const idx = cart.findIndex(c => 
-            c.name.toLowerCase().includes(itemName) || itemName.includes(c.name.toLowerCase())
-          );
-          if (idx >= 0) {
-            const removed = cart.splice(idx, 1)[0];
-            updateConversation(restaurantId, phone, { cart_json: JSON.stringify(cart) });
-            aiResponse = `"${removed.name}" cart se hata diya. 🗑️\n\n`;
-            if (cart.length > 0) {
-              aiResponse += `Ab cart mein:\n`;
-              cart.forEach((item, i) => {
-                aiResponse += `${i + 1}. ${item.qty}x ${item.name} - Rs. ${item.qty * item.price}\n`;
-              });
-              aiResponse += `\nSubtotal: Rs. ${calculateSubtotal(cart)}\nAur kuch? Ya "done" likhein.`;
-            } else {
-              aiResponse += 'Cart khaali ho gaya. Naya item add karein!';
-            }
-          } else {
-            aiResponse = `"${itemName}" cart mein nahi mila. 😅\n\n*cart* likh kar dekhein kya kya add hai.`;
-          }
+    // 2. ADD ITEMS TO CART
+    else if (parsed.action === 'add_items' && parsed.items && parsed.items.length > 0) {
+      // Add items to cart
+      parsed.items.forEach(item => {
+        const existing = cart.find(c => c.item_id === item.item_id);
+        if (existing) {
+          existing.qty += item.qty;
         } else {
-          // Try to add item to cart
-          const { qty, item } = extractItemFromMessage(text, restCtx.menuItems);
-          if (item) {
-            const newCart = addToCart(cart, item, qty);
-            updateConversation(restaurantId, phone, { cart_json: JSON.stringify(newCart) });
-            aiContext.cart = newCart;
-            aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-          } else {
-            // Regular chat - let AI respond
-            aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-          }
+          cart.push(item);
         }
-        break;
-
-      case 'awaiting_order_type':
-        const orderType = aiAgent.detectOrderType(text);
-        if (orderType) {
-          updateConversation(restaurantId, phone, { state: 'awaiting_name', order_type: orderType });
-          aiContext.conversationState = 'awaiting_name';
-          aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-        } else {
-          aiResponse = 'Bhai, "1" (delivery) ya "2" (pickup) likhein. 🙏';
-        }
-        break;
-
-      case 'awaiting_name':
-        // Use AI to extract name, phone, address from the message
-        // Customer might send everything at once
-        const details1 = await aiAgent.extractOrderDetails(text);
-        console.log('[Bot] Extracted details (awaiting_name):', details1);
-        
-        if (details1.name) {
-          prepare('UPDATE customers SET name = ? WHERE id = ?').run(details1.name, customer.id);
-          customer.name = details1.name;
-        }
-        
-        if (details1.address) {
-          prepare('UPDATE bot_conversations SET notes = ? WHERE id = ?').run(details1.address, conv.id);
-        }
-        
-        if (details1.phone && details1.phone.length >= 10) {
-          // Customer provided phone too! Use it directly
-          let cleanPhone = details1.phone;
-          if (cleanPhone.startsWith('92')) cleanPhone = '0' + cleanPhone.substring(2);
-          if (!cleanPhone.startsWith('0')) cleanPhone = '0' + cleanPhone;
-          
-          // Skip to confirmation - we have everything!
-          const orderResult = await saveOrderWithDetails(restaurantId, customer, conv, cleanPhone);
-          if (orderResult) {
-            updateConversation(restaurantId, phone, { 
-              state: 'awaiting_confirmation',
-              cart_json: JSON.stringify({ orderId: orderResult.orderId })
-            });
-            aiContext.conversationState = 'awaiting_confirmation';
-            aiContext.cart = orderResult.items;
-            aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-          }
-        } else if (details1.address) {
-          // Customer provided name + address, still need phone
-          updateConversation(restaurantId, phone, { state: 'awaiting_phone' });
-          aiContext.conversationState = 'awaiting_phone';
-          aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-        } else {
-          // Just name provided
-          updateConversation(restaurantId, phone, { state: 'awaiting_address' });
-          aiContext.conversationState = 'awaiting_address';
-          if (conv.order_type === 'delivery') {
-            aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-          } else {
-            updateConversation(restaurantId, phone, { state: 'awaiting_phone' });
-            aiContext.conversationState = 'awaiting_phone';
-            aiResponse = 'Phone number bata dijiye delivery confirmation k liye. 📱';
-          }
-        }
-        break;
-
-      case 'awaiting_address':
-        // Use AI to extract address (and maybe phone)
-        const details2 = await aiAgent.extractOrderDetails(text);
-        console.log('[Bot] Extracted details (awaiting_address):', details2);
-        
-        if (details2.address) {
-          prepare('UPDATE bot_conversations SET notes = ? WHERE id = ?').run(details2.address, conv.id);
-        }
-        
-        if (details2.phone && details2.phone.length >= 10) {
-          // Phone also provided! Save order
-          let cleanPhone = details2.phone;
-          if (cleanPhone.startsWith('92')) cleanPhone = '0' + cleanPhone.substring(2);
-          if (!cleanPhone.startsWith('0')) cleanPhone = '0' + cleanPhone;
-          
-          const orderResult = await saveOrderWithDetails(restaurantId, customer, conv, cleanPhone);
-          if (orderResult) {
-            updateConversation(restaurantId, phone, { 
-              state: 'awaiting_confirmation',
-              cart_json: JSON.stringify({ orderId: orderResult.orderId })
-            });
-            aiContext.conversationState = 'awaiting_confirmation';
-            aiContext.cart = orderResult.items;
-            aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-          }
-        } else {
-          updateConversation(restaurantId, phone, { state: 'awaiting_phone' });
-          aiContext.conversationState = 'awaiting_phone';
-          aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-        }
-        break;
-
-      case 'awaiting_phone':
-        // Use AI to extract phone
-        const details3 = await aiAgent.extractOrderDetails(text);
-        console.log('[Bot] Extracted details (awaiting_phone):', details3);
-        
-        const phoneInput = details3.phone || text.replace(/[^0-9]/g, '');
-        if (phoneInput && phoneInput.length >= 10) {
-          let cleanPhone = phoneInput;
-          if (cleanPhone.startsWith('92')) cleanPhone = '0' + cleanPhone.substring(2);
-          if (!cleanPhone.startsWith('0')) cleanPhone = '0' + cleanPhone;
-          
-          const orderResult = await saveOrderWithDetails(restaurantId, customer, conv, cleanPhone);
-          if (orderResult) {
-            updateConversation(restaurantId, phone, { 
-              state: 'awaiting_confirmation',
-              cart_json: JSON.stringify({ orderId: orderResult.orderId })
-            });
-            aiContext.conversationState = 'awaiting_confirmation';
-            aiContext.cart = orderResult.items;
-            aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-          }
-        } else {
-          aiResponse = 'Sahi phone number likhein (kam az kam 10 digits). 📱';
-        }
-        break;
-
-      case 'awaiting_confirmation':
-        if (aiAgent.detectConfirmation(text)) {
-          // Confirm order
-          const tempData = JSON.parse(conv.cart_json || '{}');
-          if (tempData.orderId) {
-            const order = prepare('SELECT * FROM orders WHERE id = ?').get(tempData.orderId);
-            if (order) {
-              prepare("UPDATE orders SET status = 'confirmed', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(order.id);
-              prepare('INSERT INTO order_status_history (order_id, status) VALUES (?, ?)').run(order.id, 'confirmed');
-              
-              aiContext.conversationState = 'confirmed';
-              aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-              
-              // Notify restaurant dashboard
-              try {
-                if (global.socketIO) {
-                  global.socketIO.emit(`restaurant:new_order:${restaurantId}`, {
-                    orderId: order.id,
-                    total: order.total,
-                    customer_name: order.customer_name,
-                    customer_phone: order.customer_phone,
-                    items: JSON.parse(order.items_json)
-                  });
-                }
-              } catch (e) {}
-              
-              updateConversation(restaurantId, phone, { 
-                state: 'idle', 
-                cart_json: '[]', 
-                order_type: null,
-                notes: null
-              });
-            }
-          }
-        } else if (text.toLowerCase().match(/^(cancel|nahi|no)/)) {
-          updateConversation(restaurantId, phone, { state: 'idle', cart_json: '[]', order_type: null });
-          aiResponse = 'Order cancel ho gaya. 🙏 Kuch aur chahiye toh bataiye!';
-        } else {
-          aiResponse = 'Bhai, "confirm" ya "cancel" likhein. 🙏';
-        }
-        break;
-
-      default:
-        updateConversation(restaurantId, phone, { state: 'idle' });
-        aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-    }
-
-    // Send the response
-    if (aiResponse) {
-      await sendTextWithDelay(sock, msg.key.remoteJid, aiResponse);
+      });
       
-      // Add to conversation history
-      if (shouldUpdateHistory) {
-        addToHistory(restaurantId, phone, 'user', text);
-        addToHistory(restaurantId, phone, 'assistant', aiResponse);
+      updateConversation(restaurantId, phone, { 
+        state: 'ordering', 
+        cart_json: JSON.stringify(cart) 
+      });
+      aiContext.cart = cart;
+      
+      // Update customer name/phone/address if provided
+      if (parsed.customer_name) {
+        prepare('UPDATE customers SET name = ? WHERE id = ?').run(parsed.customer_name, customer.id);
+        customer.name = parsed.customer_name;
+      }
+      if (parsed.customer_address) {
+        prepare('UPDATE bot_conversations SET notes = ? WHERE id = ?').run(parsed.customer_address, conv.id);
+      }
+      
+      // If customer also provided delivery type, name, phone, address → try to save order!
+      if (parsed.order_type && parsed.customer_phone) {
+        console.log('[Bot] Customer provided all info! Saving order...');
+        const orderResult = await saveOrder(
+          restaurantId, 
+          customer, 
+          cart, 
+          parsed.order_type, 
+          parsed.customer_phone, 
+          parsed.customer_address
+        );
+        if (orderResult) {
+          orderSaved = true;
+          updateConversation(restaurantId, phone, { 
+            state: 'idle', cart_json: '[]', order_type: null, notes: null 
+          });
+        }
+      }
+      
+      aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
+    }
+
+    // 3. CHECKOUT (customer says done/bas/ho gaya)
+    else if (parsed.action === 'checkout' || parsed.wants_to_checkout) {
+      if (cart.length === 0) {
+        aiResponse = 'Aap ka cart khaali hai! Pehle kuch add karein. 😊';
+      } else {
+        // Check if we have customer info
+        const hasName = customer.name || parsed.customer_name;
+        const hasPhone = parsed.customer_phone || customer.phone;
+        const hasAddress = conv.notes || parsed.customer_address;
+        
+        if (parsed.order_type && hasName && hasPhone && hasAddress) {
+          // We have everything! Save order
+          console.log('[Bot] Checkout with all info! Saving order...');
+          const finalName = parsed.customer_name || customer.name;
+          if (parsed.customer_name) {
+            prepare('UPDATE customers SET name = ? WHERE id = ?').run(parsed.customer_name, customer.id);
+            customer.name = parsed.customer_name;
+          }
+          const finalAddress = parsed.customer_address || conv.notes;
+          if (parsed.customer_address) {
+            prepare('UPDATE bot_conversations SET notes = ? WHERE id = ?').run(parsed.customer_address, conv.id);
+          }
+          
+          const orderResult = await saveOrder(
+            restaurantId, customer, cart, parsed.order_type, parsed.customer_phone || customer.phone, finalAddress
+          );
+          if (orderResult) {
+            orderSaved = true;
+            updateConversation(restaurantId, phone, { 
+              state: 'idle', cart_json: '[]', order_type: null, notes: null 
+            });
+          }
+          aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
+        } else {
+          // Need more info - ask customer
+          updateConversation(restaurantId, phone, { state: 'ordering' });
+          aiContext.conversationState = 'need_info';
+          aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
+        }
       }
     }
+
+    // 4. CONFIRM (customer confirms after seeing summary)
+    else if (parsed.action === 'confirm' || parsed.wants_to_confirm) {
+      // Check if there's a pending order
+      if (conv.state === 'awaiting_confirmation') {
+        const tempData = JSON.parse(conv.cart_json || '{}');
+        if (tempData.orderId) {
+          const order = prepare('SELECT * FROM orders WHERE id = ?').get(tempData.orderId);
+          if (order && order.status === 'new') {
+            prepare("UPDATE orders SET status = 'confirmed', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(order.id);
+            prepare('INSERT INTO order_status_history (order_id, status) VALUES (?, ?)').run(order.id, 'confirmed');
+            
+            updateConversation(restaurantId, phone, { 
+              state: 'idle', cart_json: '[]', order_type: null, notes: null 
+            });
+            
+            aiContext.conversationState = 'confirmed';
+            aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
+          }
+        }
+      } else {
+        // No pending order, treat as chat
+        aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
+      }
+    }
+
+    // 5. CUSTOMER PROVIDING INFO (name/phone/address)
+    else if (parsed.action === 'ask_info') {
+      // Update customer info
+      if (parsed.customer_name) {
+        prepare('UPDATE customers SET name = ? WHERE id = ?').run(parsed.customer_name, customer.id);
+        customer.name = parsed.customer_name;
+      }
+      if (parsed.customer_address) {
+        prepare('UPDATE bot_conversations SET notes = ? WHERE id = ?').run(parsed.customer_address, conv.id);
+      }
+      
+      // If we have cart + all info, save order
+      if (cart.length > 0 && parsed.order_type && parsed.customer_phone) {
+        console.log('[Bot] Info provided with cart! Saving order...');
+        const orderResult = await saveOrder(
+          restaurantId, customer, cart, parsed.order_type, parsed.customer_phone, 
+          parsed.customer_address || conv.notes
+        );
+        if (orderResult) {
+          orderSaved = true;
+          updateConversation(restaurantId, phone, { 
+            state: 'idle', cart_json: '[]', order_type: null, notes: null 
+          });
+        }
+      }
+      
+      aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
+    }
+
+    // 6. GENERAL CHAT
+    else {
+      aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
+    }
+
+    // ===== SEND RESPONSE =====
+    if (aiResponse) {
+      console.log('[Bot] Response:', aiResponse.substring(0, 100));
+      await sendTextWithDelay(sock, msg.key.remoteJid, aiResponse);
+      
+      addToHistory(restaurantId, phone, 'user', text);
+      addToHistory(restaurantId, phone, 'assistant', aiResponse);
+    }
+    
+    console.log('[Bot] ========== DONE ==========\n');
   } catch (e) {
     console.error('[Bot] handleMessage error:', e.message);
     console.error(e.stack);
@@ -670,7 +523,7 @@ async function notifyOrderStatus(restaurantId, orderId, status, reason) {
         }
         break;
       case 'delivered':
-        message = `✅ Aap ka order *${order.id}* deliver ho gaya!\n\nKhana kaisa laga? Humari service kaisi rahi? Feedback zaroor dein! 🙏\n\nDobara order k liye "menu" likhein! 😊`;
+        message = `✅ Aap ka order *${order.id}* deliver ho gaya!\n\nKhana kaisa laga? Feedback zaroor dein! 🙏\n\nDobara order k liye "menu" likhein! 😊`;
         break;
       case 'cancelled':
         message = `❌ Bhai, order *${order.id}* cancel karna para.\n${reason ? `Waja: ${reason}\n` : ''}Maaf kijeye ga. 🙏\n\nDobara try karein!`;

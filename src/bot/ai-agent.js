@@ -1,12 +1,11 @@
 /**
- * AI-Powered Restaurant Agent
+ * AI-Powered Restaurant Agent (Fully Autonomous)
  * 
- * Uses LLM (z-ai-web-dev-sdk) for natural, human-like conversations.
- * - Understands ANY message naturally
- * - Replies in Roman Urdu/English (Pakistani style)
- * - Handles orders, menu, deals, FAQs, small talk - everything naturally
- * - Context-aware (remembers customer history)
- * - Restaurant-aware (knows menu, hours, deals)
+ * AI handles EVERYTHING - no rigid state machine!
+ * - Parses any message naturally
+ * - Extracts: items, quantity, delivery type, name, phone, address
+ * - Decides what action to take (add to cart, save order, etc.)
+ * - Replies in natural Roman Urdu
  */
 
 let zaiInstance = null;
@@ -20,7 +19,7 @@ async function getZAI() {
 }
 
 /**
- * Build system prompt for the restaurant agent
+ * Build system prompt for natural conversation
  */
 function buildSystemPrompt(restaurant, customer, context) {
   const {
@@ -33,11 +32,9 @@ function buildSystemPrompt(restaurant, customer, context) {
     recentOrders = [],
     isVIP = false,
     isReturning = false,
-    conversationState = 'idle',
     cart = []
   } = context;
 
-  // Build menu summary
   let menuSummary = 'No menu items yet';
   if (menuItems.length > 0) {
     const categories = {};
@@ -51,68 +48,60 @@ function buildSystemPrompt(restaurant, customer, context) {
       .join('\n');
   }
 
-  // Build deals summary
   let dealsSummary = 'No active deals';
   if (deals.length > 0) {
     dealsSummary = deals.map(d => 
-      `${d.name} - Rs. ${d.deal_price}${d.original_price ? ` (was Rs. ${d.original_price})` : ''}${d.description ? ` - ${d.description}` : ''}`
+      `${d.name} - Rs. ${d.deal_price}${d.original_price ? ` (was Rs. ${d.original_price})` : ''}`
     ).join('\n');
   }
 
-  // Build hours summary
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  let hoursSummary = 'Hours not set (default: 11 AM - 11 PM daily)';
+  let hoursSummary = '11 AM - 11 PM daily (default)';
   if (operatingHours.length > 0) {
     hoursSummary = operatingHours.map(h => 
       `${days[h.day_of_week]}: ${h.is_closed ? 'Closed' : `${h.open_time} - ${h.close_time}`}`
     ).join('\n');
   }
 
-  // Build delivery areas
-  let deliverySummary = 'Delivery: Rs. 100 default (3-5 km), 30-45 min';
+  let deliverySummary = 'Delivery: Rs. 100 (3-5 km), 30-45 min';
   if (deliveryAreas.length > 0) {
     deliverySummary = deliveryAreas.map(a => 
       `${a.name}: Rs. ${a.delivery_fee}${a.estimated_time ? ` (${a.estimated_time})` : ''}`
     ).join('\n');
   }
 
-  // Build cart summary if ordering
   let cartSummary = '';
   if (cart.length > 0) {
+    const subtotal = cart.reduce((s, i) => s + (i.qty * i.price), 0);
     cartSummary = `\n\nCURRENT CART:\n${cart.map((item, i) => 
       `${i + 1}. ${item.qty}x ${item.name} - Rs. ${item.qty * item.price}`
-    ).join('\n')}\nSubtotal: Rs. ${cart.reduce((s, i) => s + (i.qty * i.price), 0)}`;
+    ).join('\n')}\nSubtotal: Rs. ${subtotal}`;
   }
 
-  // Build recent orders summary
   let ordersSummary = '';
   if (recentOrders.length > 0) {
     const lastOrder = recentOrders[0];
     const daysAgo = Math.floor((Date.now() - new Date(lastOrder.created_at).getTime()) / 86400000);
-    ordersSummary = `\n\nCUSTOMER HISTORY:\n- Total orders: ${recentOrders.length}\n- Last order: ${daysAgo} days ago (Rs. ${lastOrder.total})\n- Status: ${lastOrder.status}`;
+    ordersSummary = `\n\nCUSTOMER: ${recentOrders.length} orders, last ${daysAgo} days ago`;
   }
 
-  return `You are ${restaurant.name}'s WhatsApp agent - a friendly, warm, professional restaurant staff member chatting with customers on WhatsApp.
+  return `You are ${restaurant.name}'s WhatsApp agent - a friendly Pakistani restaurant staff member.
 
 CRITICAL RULES:
-1. ALWAYS reply in Roman Urdu/English (Pakistani style - like how people actually text on WhatsApp in Pakistan)
-2. Keep replies SHORT (1-3 lines max) - like real WhatsApp texting, NOT long paragraphs
-3. Use emojis naturally (1-2 per message, not excessive)
-4. Be warm, friendly, and helpful - like a real human staff member
-5. NEVER say you're an AI or bot - you're a real person working at the restaurant
-6. Don't use formal English - use casual Roman Urdu like friends text each other
-7. If customer asks something you don't know, be honest but helpful
+1. ALWAYS reply in Roman Urdu/English (Pakistani WhatsApp style)
+2. Keep replies SHORT (1-3 lines max) - like real WhatsApp texting
+3. Use 1-2 emojis naturally
+4. Be warm, friendly, helpful - like a real human
+5. NEVER say you're an AI/bot
+6. Don't be formal - use casual Roman Urdu
 
 RESTAURANT INFO:
 - Name: ${restaurant.name}
-- Owner: ${restaurant.owner_name || 'N/A'}
 - Phone: ${restaurant.phone}
 - Address: ${restaurant.address || 'Not set'}
-- Currency: ${restaurant.currency || 'Rs.'}
+- Currently: ${isOpen ? 'OPEN' : 'CLOSED'}${closingTime ? ` (closes ${closingTime})` : ''}
 - Delivery fee: Rs. ${restaurant.delivery_fee_default || 100}
 - Min order: Rs. ${restaurant.min_order_amount || 0}
-- Tax: ${restaurant.tax_percentage || 0}%
-- Currently: ${isOpen ? 'OPEN' : 'CLOSED'}${closingTime ? ` (closes at ${closingTime})` : ''}
 
 MENU:
 ${menuSummary}
@@ -120,7 +109,7 @@ ${menuSummary}
 ACTIVE DEALS:
 ${dealsSummary}
 
-OPERATING HOURS:
+HOURS:
 ${hoursSummary}
 
 DELIVERY AREAS:
@@ -130,43 +119,144 @@ ${ordersSummary}${cartSummary}
 CUSTOMER INFO:
 - Name: ${customer?.name || 'New customer'}
 - Phone: ${customer?.phone}
-${isVIP ? '- ⭐ VIP CUSTOMER (10+ orders) - give special treatment!' : ''}
-${isReturning ? '- Returning customer' : '- First time customer'}
+${isVIP ? '- ⭐ VIP CUSTOMER!' : ''}
+${isReturning ? '- Returning customer' : '- First time'}
 
-CONVERSATION STATE: ${conversationState}
-${conversationState === 'ordering' ? 'Customer is currently ordering. Help them add items to cart. When they say "done", proceed to checkout.' : ''}
-${conversationState === 'awaiting_order_type' ? 'Ask if delivery or pickup.' : ''}
-${conversationState === 'awaiting_name' ? 'Ask customer name.' : ''}
-${conversationState === 'awaiting_address' ? 'Ask delivery address.' : ''}
-${conversationState === 'awaiting_phone' ? 'Ask phone number for delivery confirmation.' : ''}
-${conversationState === 'awaiting_confirmation' ? 'Show order summary and ask to confirm.' : ''}
-
-HOW TO HANDLE ORDERS:
-- If customer wants to order something from menu, confirm it's added to cart
-- For quantity, parse "2x biryani" or "biryani 2" as 2 plates
-- When cart has items and customer says "done"/"ho gaya"/"bas", tell them to choose delivery (1) or pickup (2)
-- Collect: name → address (if delivery) → phone → show summary → confirm
-- Always mention total amount and order ID format like "ord_xxx"
-
-IMPORTANT: Reply in 1-3 lines only, conversational, like real WhatsApp texting. Be helpful and friendly!`;
+INSTRUCTIONS:
+- Help customer with orders naturally
+- If they want to order, help them - don't make them follow rigid steps
+- If they provide name/phone/address in any format, accept it
+- Be conversational, not robotic
+- Keep it short like real WhatsApp texting`;
 }
 
 /**
- * Generate AI response for customer message
+ * Parse customer message and extract order intent + details
+ * This is the KEY function - AI decides what to do
+ */
+async function parseCustomerMessage(message, menuItems, cart = []) {
+  try {
+    const zai = await getZAI();
+    
+    const menuSummary = menuItems.map(m => `${m.name} (Rs. ${m.price})`).join(', ');
+    
+    const completion = await zai.chat.completions.create({
+      messages: [
+        {
+          role: 'assistant',
+          content: `You are an order parser for a restaurant WhatsApp bot. Parse the customer's message and extract order information.
+
+Return ONLY valid JSON (no markdown, no code blocks). Format:
+{
+  "action": "add_items | checkout | confirm | cancel | chat | ask_info",
+  "items": [{"name": "exact menu item name", "qty": 1}],
+  "order_type": "delivery | pickup | null",
+  "customer_name": "string or null",
+  "customer_phone": "string or null", 
+  "customer_address": "string or null",
+  "wants_to_checkout": true/false,
+  "wants_to_confirm": true/false,
+  "wants_to_cancel": true/false,
+  "reply_hint": "what the customer wants (for context)"
+}
+
+Actions:
+- "add_items": Customer wants to add item(s) to cart
+- "checkout": Customer wants to proceed/finish ordering (says "done", "bas", "ho gaya", "that's it")
+- "confirm": Customer confirms the order (says "confirm", "yes", "haan", "ok", "kar do")
+- "cancel": Customer wants to cancel
+- "chat": General chat/question (not ordering)
+- "ask_info": Customer is providing info (name, phone, address)
+
+Rules:
+- Match items to closest menu item name from: ${menuSummary}
+- Default qty is 1
+- Extract phone numbers (10+ digits)
+- Extract names (person names, not phone/address)
+- Extract addresses (location descriptions)
+- "wants_to_checkout" = customer says done/finished
+- "wants_to_confirm" = customer says yes/confirm/ok
+- If message is just greeting/chat, action = "chat"
+- Return ONLY JSON, nothing else`
+        },
+        {
+          role: 'user',
+          content: message
+        }
+      ],
+      thinking: { type: 'disabled' },
+      temperature: 0,
+      max_tokens: 300
+    });
+
+    const response = completion.choices[0]?.message?.content?.trim();
+    
+    let jsonStr = response;
+    if (jsonStr.includes('```')) {
+      jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    }
+    
+    const parsed = JSON.parse(jsonStr);
+    
+    // Match items to actual menu items
+    if (parsed.items && Array.isArray(parsed.items)) {
+      const matchedItems = [];
+      for (const item of parsed.items) {
+        const menuItem = menuItems.find(m => 
+          m.name.toLowerCase() === item.name.toLowerCase() ||
+          m.name.toLowerCase().includes(item.name.toLowerCase()) ||
+          item.name.toLowerCase().includes(m.name.toLowerCase())
+        );
+        if (menuItem) {
+          matchedItems.push({
+            item_id: menuItem.id,
+            name: menuItem.name,
+            price: menuItem.price,
+            qty: Math.min(Math.max(item.qty || 1, 1), 20)
+          });
+        }
+      }
+      parsed.items = matchedItems;
+    } else {
+      parsed.items = [];
+    }
+    
+    // Clean phone
+    if (parsed.customer_phone) {
+      parsed.customer_phone = parsed.customer_phone.replace(/[^0-9]/g, '');
+    }
+    
+    return parsed;
+  } catch (error) {
+    console.error('[AI] parseCustomerMessage error:', error.message);
+    return {
+      action: 'chat',
+      items: [],
+      order_type: null,
+      customer_name: null,
+      customer_phone: null,
+      customer_address: null,
+      wants_to_checkout: false,
+      wants_to_confirm: false,
+      wants_to_cancel: false,
+      reply_hint: 'parse failed'
+    };
+  }
+}
+
+/**
+ * Generate natural AI response
  */
 async function generateResponse(restaurant, customer, customerMessage, context = {}) {
   try {
     const zai = await getZAI();
     const systemPrompt = buildSystemPrompt(restaurant, customer, context);
     
-    // Build conversation history
     const messages = [
       { role: 'assistant', content: systemPrompt }
     ];
     
-    // Add recent conversation history if available
     if (context.conversationHistory && context.conversationHistory.length > 0) {
-      // Keep only last 10 messages to avoid token limit
       const recentHistory = context.conversationHistory.slice(-10);
       recentHistory.forEach(msg => {
         messages.push({
@@ -176,7 +266,6 @@ async function generateResponse(restaurant, customer, customerMessage, context =
       });
     }
     
-    // Add current customer message
     messages.push({
       role: 'user',
       content: customerMessage
@@ -185,8 +274,8 @@ async function generateResponse(restaurant, customer, customerMessage, context =
     const completion = await zai.chat.completions.create({
       messages,
       thinking: { type: 'disabled' },
-      temperature: 0.7, // Slightly creative but consistent
-      max_tokens: 200 // Keep responses short
+      temperature: 0.7,
+      max_tokens: 200
     });
 
     const response = completion.choices[0]?.message?.content;
@@ -197,7 +286,7 @@ async function generateResponse(restaurant, customer, customerMessage, context =
     
     return response.trim();
   } catch (error) {
-    console.error('[AI] Error generating response:', error.message);
+    console.error('[AI] generateResponse error:', error.message);
     return getFallbackResponse(customerMessage);
   }
 }
@@ -224,226 +313,12 @@ function getFallbackResponse(message) {
     return 'Allah hafiz! Phir milte hain! 👋';
   }
   
-  return 'Bataiye, kya help karoon? 😊 Menu, order, deals - kuch bhi pooch lein!';
-}
-
-/**
- * Detect if customer wants to place an order (for state machine)
- */
-function detectOrderIntent(message) {
-  const lower = message.toLowerCase();
-  
-  // Direct order commands
-  if (/^(order|new order|place order|kar do order|khana order|pizza chahiye|biryani chahiye|mujhe .+ chahiye)/.test(lower)) {
-    return true;
-  }
-  
-  // Item name + quantity pattern
-  if (/\d+\s*x\s|x\s*\d+|plate|portion|piece|burger|pizza|biryani|karahi|tikka|kebab|kabab|cola|drink|water/i.test(lower)) {
-    return true;
-  }
-  
-  return false;
-}
-
-/**
- * Detect if customer confirms order
- */
-function detectConfirmation(message) {
-  const lower = message.toLowerCase();
-  return /^(confirm|yes|haan|ok|okay|theek|pakka|kar do|karein|ho jaye|done|kar dein)/.test(lower) ||
-         lower === 'haan' || lower === 'ok' || lower === 'yes';
-}
-
-/**
- * Detect if customer wants delivery or pickup
- */
-function detectOrderType(message) {
-  const lower = message.toLowerCase();
-  if (lower.includes('deliver') || lower === '1' || lower.includes('ghar par')) {
-    return 'delivery';
-  }
-  if (lower.includes('pickup') || lower.includes('pick') || lower === '2' || lower.includes('le jayein') || lower.includes('udhar se')) {
-    return 'pickup';
-  }
-  return null;
-}
-
-/**
- * Extract item name and quantity from message
- */
-function extractItemAndQuantity(message, menuItems) {
-  // Try to find quantity
-  let qty = 1;
-  let qtyMatch = message.match(/(\d+)\s*x/i) || message.match(/x\s*(\d+)/i) || message.match(/(\d+)\s*(?:plate|portion|piece)/i);
-  if (qtyMatch) {
-    qty = Math.min(parseInt(qtyMatch[1]), 20);
-  } else {
-    const numMatch = message.match(/(\d+)/);
-    if (numMatch) {
-      qty = Math.min(parseInt(numMatch[1]), 20);
-    }
-  }
-  
-  // Try to find item name
-  const lower = message.toLowerCase();
-  let foundItem = null;
-  
-  // Exact match
-  foundItem = menuItems.find(i => lower.includes(i.name.toLowerCase()));
-  
-  // Partial match
-  if (!foundItem) {
-    foundItem = menuItems.find(i => {
-      const itemName = i.name.toLowerCase();
-      const words = itemName.split(/\s+/);
-      return words.some(w => w.length > 3 && lower.includes(w));
-    });
-  }
-  
-  // Word match
-  if (!foundItem) {
-    foundItem = menuItems.find(i => {
-      const itemName = i.name.toLowerCase();
-      return lower.split(/\s+/).some(w => w.length > 3 && itemName.includes(w));
-    });
-  }
-  
-  return { qty, item: foundItem };
-}
-
-/**
- * Extract order details (name, phone, address) from natural message
- * Returns: { name, phone, address, hasAllInfo }
- */
-async function extractOrderDetails(message) {
-  try {
-    const zai = await getZAI();
-    
-    const completion = await zai.chat.completions.create({
-      messages: [
-        {
-          role: 'assistant',
-          content: `You are a data extractor. Given a customer's message, extract order details.
-Return ONLY valid JSON (no markdown, no code blocks). Format:
-{"name": "extracted name or null", "phone": "extracted phone or null", "address": "extracted address or null"}
-
-Rules:
-- Phone: extract any phone number (10+ digits, may have country code)
-- Name: extract person name (not phone, not address)
-- Address: extract delivery address/location description
-- If not found, use null
-- Return ONLY the JSON, nothing else`
-        },
-        {
-          role: 'user',
-          content: message
-        }
-      ],
-      thinking: { type: 'disabled' },
-      temperature: 0,
-      max_tokens: 200
-    });
-
-    const response = completion.choices[0]?.message?.content?.trim();
-    
-    // Try to parse JSON (handle if wrapped in markdown code blocks)
-    let jsonStr = response;
-    if (jsonStr.includes('```')) {
-      jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    }
-    
-    const details = JSON.parse(jsonStr);
-    return {
-      name: details.name || null,
-      phone: details.phone ? details.phone.replace(/[^0-9]/g, '') : null,
-      address: details.address || null
-    };
-  } catch (error) {
-    console.error('[AI] extractOrderDetails error:', error.message);
-    return { name: null, phone: null, address: null };
-  }
-}
-
-/**
- * Extract item and quantity from message using AI
- */
-async function extractOrderItems(message, menuItems) {
-  try {
-    const zai = await getZAI();
-    
-    const menuSummary = menuItems.map(m => `- ${m.name} (Rs. ${m.price})`).join('\n');
-    
-    const completion = await zai.chat.completions.create({
-      messages: [
-        {
-          role: 'assistant',
-          content: `You are an order parser. Given a customer message and a menu, extract what items they want to order.
-
-Return ONLY valid JSON array (no markdown). Format:
-[{"name": "exact menu item name", "qty": 1}]
-
-Rules:
-- Match customer's request to closest menu item
-- Default quantity is 1 if not specified
-- If no items match, return empty array []
-- Return ONLY the JSON, nothing else
-
-Available menu items:
-${menuSummary}`
-        },
-        {
-          role: 'user',
-          content: message
-        }
-      ],
-      thinking: { type: 'disabled' },
-      temperature: 0,
-      max_tokens: 200
-    });
-
-    const response = completion.choices[0]?.message?.content?.trim();
-    
-    let jsonStr = response;
-    if (jsonStr.includes('```')) {
-      jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    }
-    
-    const items = JSON.parse(jsonStr);
-    
-    // Match to actual menu items
-    const matchedItems = [];
-    for (const item of items) {
-      const menuItem = menuItems.find(m => 
-        m.name.toLowerCase() === item.name.toLowerCase() ||
-        m.name.toLowerCase().includes(item.name.toLowerCase()) ||
-        item.name.toLowerCase().includes(m.name.toLowerCase())
-      );
-      if (menuItem) {
-        matchedItems.push({
-          item_id: menuItem.id,
-          name: menuItem.name,
-          price: menuItem.price,
-          qty: Math.min(item.qty || 1, 20)
-        });
-      }
-    }
-    
-    return matchedItems;
-  } catch (error) {
-    console.error('[AI] extractOrderItems error:', error.message);
-    return [];
-  }
+  return 'Bataiye, kya help karoon? 😊';
 }
 
 module.exports = {
   generateResponse,
   getFallbackResponse,
-  detectOrderIntent,
-  detectConfirmation,
-  detectOrderType,
-  extractItemAndQuantity,
-  extractOrderDetails,
-  extractOrderItems,
+  parseCustomerMessage,
   buildSystemPrompt
 };
