@@ -358,10 +358,23 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
   try {
     restaurantId = String(restaurantId);
     const messages = messageUpsert.messages;
-    if (!messages || messages.length === 0) return;
+    if (!messages || messages.length === 0) {
+      console.log('[Bot] No messages in upsert');
+      return;
+    }
 
     const msg = messages[0];
-    if (!msg.message || msg.key.fromMe || msg.key.remoteJid === 'status@broadcast') return;
+    console.log('[Bot] Processing message:', {
+      hasMessage: !!msg.message,
+      fromMe: msg.key?.fromMe,
+      remoteJid: msg.key?.remoteJid,
+      messageType: Object.keys(msg.message || {})[0]
+    });
+    
+    if (!msg.message || msg.key.fromMe || msg.key.remoteJid === 'status@broadcast') {
+      console.log('[Bot] Skipping message (from me or broadcast or no message)');
+      return;
+    }
 
     const conversation = msg.message.conversation || 
                        msg.message.extendedTextMessage?.text ||
@@ -371,10 +384,27 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
 
     const text = (conversation || '').trim();
     const phone = String(msg.key.remoteJid || '').split('@')[0];
-    if (!phone) return;
+    console.log(`[Bot] From ${phone}: "${text}"`);
+    
+    if (!phone) {
+      console.log('[Bot] No phone, skipping');
+      return;
+    }
+    
+    if (!text) {
+      console.log('[Bot] Empty text, will handle as empty message');
+    }
 
     const restaurant = prepare('SELECT * FROM restaurants WHERE id = ?').get(restaurantId);
-    if (!restaurant || !restaurant.is_active) return;
+    if (!restaurant) {
+      console.log('[Bot] Restaurant not found:', restaurantId);
+      return;
+    }
+    if (!restaurant.is_active) {
+      console.log('[Bot] Restaurant inactive');
+      return;
+    }
+    console.log('[Bot] Restaurant:', restaurant.name);
 
     try {
       await sock.readMessages([msg.key]);
@@ -384,6 +414,7 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
     prepare('UPDATE customers SET last_seen = CURRENT_TIMESTAMP WHERE id = ?').run(customer.id);
 
     let conv = getOrCreateConversation(restaurantId, phone);
+    console.log('[Bot] Conversation state:', conv.state);
 
     // Session timeout check
     const lastMsgTime = new Date(conv.last_message_at || Date.now()).getTime();
@@ -397,8 +428,11 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
     }
 
     const intent = detectIntent(text);
+    console.log('[Bot] Detected intent:', intent);
+    
     const custCtx = getCustomerContext(restaurantId, phone);
     const restCtx = getRestaurantContext(restaurantId);
+    console.log('[Bot] Restaurant open:', restCtx.isOpen, '| Active deals:', restCtx.activeDeals.length);
 
     // ==================== GLOBAL INTENTS ====================
     

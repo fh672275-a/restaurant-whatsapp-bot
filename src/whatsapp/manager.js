@@ -220,19 +220,48 @@ async function startSession(restaurantId) {
     // Handle incoming messages
     sock.ev.on('messages.upsert', async (m) => {
       try {
-        // Store messages for retry requests
+        console.log('[WA] messages.upsert received for restaurant:', restaurantId);
+        console.log('[WA] Type:', m.type, 'Messages count:', m.messages ? m.messages.length : 0);
+        
         if (m.messages && m.messages.length > 0) {
           for (const msg of m.messages) {
             if (msg.key && msg.key.remoteJid && msg.message) {
-              storeMessage(msg.key.remoteJid, msg);
+              const fromMe = msg.key.fromMe ? 'YES' : 'NO';
+              const jid = msg.key.remoteJid;
+              const msgType = Object.keys(msg.message || {})[0];
+              console.log(`[WA] Message from JID: ${jid} | FromMe: ${fromMe} | Type: ${msgType}`);
+              storeMessage(jid, msg);
             }
           }
         }
-        const handler = getBotHandler();
-        await handler.handleMessage(sock, m, restaurantId);
+        
+        // Only process if it's a notification (new message) - NOT history sync
+        if (m.type === 'notify' && m.messages && m.messages.length > 0) {
+          const handler = getBotHandler();
+          await handler.handleMessage(sock, m, restaurantId);
+        } else if (m.type === 'append') {
+          // Also handle append type (messages from another device)
+          console.log('[WA] Append type message, processing...');
+          const handler = getBotHandler();
+          await handler.handleMessage(sock, m, restaurantId);
+        } else {
+          console.log('[WA] Skipping message type:', m.type);
+        }
       } catch (e) {
         console.error('[WA] Message handling error:', e.message);
+        console.error(e.stack);
       }
+    });
+
+    // Also listen for messages.update (status changes, etc.)
+    sock.ev.on('messages.update', (updates) => {
+      try {
+        for (const update of updates) {
+          if (update.key && update.key.remoteJid && !update.key.fromMe) {
+            console.log('[WA] Message update from:', update.key.remoteJid, 'Status:', update.update?.status);
+          }
+        }
+      } catch (e) {}
     });
 
     // Handle message receipt updates (delivery/read)
