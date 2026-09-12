@@ -33,6 +33,8 @@ const restaurantRoutes = require('./src/routes/restaurants');
 const menuRoutes = require('./src/routes/menus');
 const orderRoutes = require('./src/routes/orders');
 const whatsappRoutes = require('./src/routes/whatsapp');
+const dealsRoutes = require('./src/routes/deals');
+const settingsRoutes = require('./src/routes/settings');
 
 // Import WhatsApp manager
 const waManager = require('./src/whatsapp/manager');
@@ -180,12 +182,78 @@ app.get('/restaurant/settings', (req, res) => {
   res.render('restaurant-settings');
 });
 
+// Restaurant - Deals Management
+app.get('/restaurant/deals', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-deals');
+});
+
+// Restaurant - Hours Management
+app.get('/restaurant/hours', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-hours');
+});
+
+// Restaurant - Delivery Areas
+app.get('/restaurant/delivery', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-delivery');
+});
+
+// Restaurant - Customers
+app.get('/restaurant/customers', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-customers');
+});
+
+// Restaurant - Feedback
+app.get('/restaurant/feedback', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-feedback');
+});
+
+// Restaurant - Broadcasts
+app.get('/restaurant/broadcasts', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-broadcasts');
+});
+
+// Restaurant - Reservations
+app.get('/restaurant/reservations', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-reservations');
+});
+
+// Restaurant - Analytics
+app.get('/restaurant/analytics', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-analytics');
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/restaurants', restaurantRoutes);
 app.use('/api/menus', menuRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/deals', dealsRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Socket.io connection
 io.on('connection', (socket) => {

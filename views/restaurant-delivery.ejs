@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delivery Areas - Restaurant Bot</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/css/dashboard.css" rel="stylesheet">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo"><i class="fab fa-whatsapp"></i></div>
+        <div><h2 id="rest-name">Restaurant</h2><p>Owner Panel</p></div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/restaurant/dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="/restaurant/orders"><i class="fas fa-shopping-bag"></i> Orders</a>
+        <a href="/restaurant/menu"><i class="fas fa-utensils"></i> Menu</a>
+        <a href="/restaurant/deals"><i class="fas fa-tags"></i> Deals</a>
+        <a href="/restaurant/hours"><i class="fas fa-clock"></i> Hours</a>
+        <a href="/restaurant/delivery" class="active"><i class="fas fa-truck"></i> Delivery Areas</a>
+        <a href="/restaurant/customers"><i class="fas fa-users"></i> Customers</a>
+        <a href="/restaurant/feedback"><i class="fas fa-star"></i> Feedback</a>
+        <a href="/restaurant/broadcasts"><i class="fas fa-bullhorn"></i> Broadcasts</a>
+        <a href="/restaurant/reservations"><i class="fas fa-calendar-check"></i> Reservations</a>
+        <a href="/restaurant/analytics"><i class="fas fa-chart-bar"></i> Analytics</a>
+        <a href="/restaurant/whatsapp"><i class="fab fa-whatsapp"></i> WhatsApp</a>
+        <a href="/restaurant/settings"><i class="fas fa-cog"></i> Settings</a>
+        <a href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <h1><i class="fas fa-truck"></i> Delivery Areas</h1>
+        <button onclick="showAddModal()" class="btn btn-success">
+          <i class="fas fa-plus"></i> Naya Area
+        </button>
+      </header>
+
+      <div class="content-body">
+        <div class="card">
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Area Name</th>
+                    <th>Delivery Fee</th>
+                    <th>Est. Time</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="areas-list">
+                  <tr><td colspan="5" class="text-center">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add/Edit Modal -->
+  <div class="modal fade" id="areaModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalTitle">Naya Delivery Area</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="area-id">
+          <div class="mb-3">
+            <label class="form-label">Area Name *</label>
+            <input type="text" class="form-control" id="area-name" placeholder="Gulshan-e-Iqbal" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Delivery Fee (Rs.)</label>
+            <input type="number" step="0.01" class="form-control" id="area-fee" value="100">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Estimated Time</label>
+            <input type="text" class="form-control" id="area-time" placeholder="30-45 min">
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="area-active" checked>
+            <label class="form-check-label" for="area-active">Active</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-success" onclick="saveArea()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const areaModal = new bootstrap.Modal(document.getElementById('areaModal'));
+
+    async function loadRestaurant() {
+      const res = await fetch('/api/restaurants/<%= user.id %>');
+      const data = await res.json();
+      document.getElementById('rest-name').textContent = data.restaurant.name;
+    }
+
+    async function loadAreas() {
+      const res = await fetch('/api/settings/delivery-areas');
+      const data = await res.json();
+      const list = document.getElementById('areas-list');
+      if (!data.areas || data.areas.length === 0) {
+        list.innerHTML = '<tr><td colspan="5" class="text-center py-3">Koi area add nahi. Default Rs. 100 delivery charge lagega.</td></tr>';
+        return;
+      }
+      list.innerHTML = data.areas.map(a => `
+        <tr>
+          <td><strong>${a.name}</strong></td>
+          <td>Rs. ${a.delivery_fee}</td>
+          <td>${a.estimated_time || '-'}</td>
+          <td>${a.is_active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</td>
+          <td>
+            <button onclick="editArea(${JSON.stringify(a).replace(/"/g, '&quot;')})" class="btn btn-sm btn-outline-primary">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button onclick="deleteArea('${a.id}')" class="btn btn-sm btn-outline-danger">
+              <i class="fas fa-trash"></i>
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function showAddModal() {
+      document.getElementById('modalTitle').textContent = 'Naya Delivery Area';
+      document.getElementById('area-id').value = '';
+      document.getElementById('area-name').value = '';
+      document.getElementById('area-fee').value = '100';
+      document.getElementById('area-time').value = '';
+      document.getElementById('area-active').checked = true;
+      areaModal.show();
+    }
+
+    function editArea(area) {
+      document.getElementById('modalTitle').textContent = 'Edit Area';
+      document.getElementById('area-id').value = area.id;
+      document.getElementById('area-name').value = area.name;
+      document.getElementById('area-fee').value = area.delivery_fee;
+      document.getElementById('area-time').value = area.estimated_time || '';
+      document.getElementById('area-active').checked = area.is_active == 1;
+      areaModal.show();
+    }
+
+    async function saveArea() {
+      const id = document.getElementById('area-id').value;
+      const data = {
+        name: document.getElementById('area-name').value,
+        delivery_fee: parseFloat(document.getElementById('area-fee').value) || 0,
+        estimated_time: document.getElementById('area-time').value,
+        is_active: document.getElementById('area-active').checked
+      };
+      if (!data.name) { alert('Name zaruri hai'); return; }
+      const url = id ? `/api/settings/delivery-areas/${id}` : '/api/settings/delivery-areas';
+      const method = id ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      if (result.success) {
+        areaModal.hide();
+        loadAreas();
+      }
+    }
+
+    async function deleteArea(id) {
+      if (!confirm('Delete karein?')) return;
+      await fetch(`/api/settings/delivery-areas/${id}`, { method: 'DELETE' });
+      loadAreas();
+    }
+
+    loadRestaurant();
+    loadAreas();
+  </script>
+</body>
+</html>

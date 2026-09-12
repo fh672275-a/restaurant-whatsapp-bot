@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Broadcasts - Restaurant Bot</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/css/dashboard.css" rel="stylesheet">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo"><i class="fab fa-whatsapp"></i></div>
+        <div><h2 id="rest-name">Restaurant</h2><p>Owner Panel</p></div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/restaurant/dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="/restaurant/orders"><i class="fas fa-shopping-bag"></i> Orders</a>
+        <a href="/restaurant/menu"><i class="fas fa-utensils"></i> Menu</a>
+        <a href="/restaurant/deals"><i class="fas fa-tags"></i> Deals</a>
+        <a href="/restaurant/hours"><i class="fas fa-clock"></i> Hours</a>
+        <a href="/restaurant/delivery"><i class="fas fa-truck"></i> Delivery Areas</a>
+        <a href="/restaurant/customers"><i class="fas fa-users"></i> Customers</a>
+        <a href="/restaurant/feedback"><i class="fas fa-star"></i> Feedback</a>
+        <a href="/restaurant/broadcasts" class="active"><i class="fas fa-bullhorn"></i> Broadcasts</a>
+        <a href="/restaurant/reservations"><i class="fas fa-calendar-check"></i> Reservations</a>
+        <a href="/restaurant/analytics"><i class="fas fa-chart-bar"></i> Analytics</a>
+        <a href="/restaurant/whatsapp"><i class="fab fa-whatsapp"></i> WhatsApp</a>
+        <a href="/restaurant/settings"><i class="fas fa-cog"></i> Settings</a>
+        <a href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <h1><i class="fas fa-bullhorn"></i> Broadcast Messages</h1>
+        <button onclick="showAddModal()" class="btn btn-success">
+          <i class="fas fa-plus"></i> Naya Broadcast
+        </button>
+      </header>
+
+      <div class="content-body">
+        <div class="alert alert-info">
+          <i class="fas fa-info-circle"></i>
+          <strong>Broadcast:</strong> Apne customers ko promotional messages bhejein (new deals, special offers, etc.). WhatsApp connected hona zaroori hai.
+        </div>
+
+        <div class="card">
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Target</th>
+                    <th>Status</th>
+                    <th>Sent/Failed</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="broadcasts-list">
+                  <tr><td colspan="6" class="text-center">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add Broadcast Modal -->
+  <div class="modal fade" id="broadcastModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Naya Broadcast Message</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Title *</label>
+            <input type="text" class="form-control" id="bc-title" placeholder="Eid Special Offer">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Message *</label>
+            <textarea class="form-control" id="bc-message" rows="5" placeholder="Eid Mubarak! 🌙 Special discount available..."></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Target Audience</label>
+            <select class="form-control" id="bc-target">
+              <option value="all">All Customers</option>
+              <option value="recent">Recent (last 30 days)</option>
+              <option value="vip">VIP (10+ orders)</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-success" onclick="saveBroadcast()">Save (Draft)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const broadcastModal = new bootstrap.Modal(document.getElementById('broadcastModal'));
+
+    async function loadRestaurant() {
+      const res = await fetch('/api/restaurants/<%= user.id %>');
+      const data = await res.json();
+      document.getElementById('rest-name').textContent = data.restaurant.name;
+    }
+
+    async function loadBroadcasts() {
+      const res = await fetch('/api/settings/broadcasts');
+      const data = await res.json();
+      const list = document.getElementById('broadcasts-list');
+      if (!data.broadcasts || data.broadcasts.length === 0) {
+        list.innerHTML = '<tr><td colspan="6" class="text-center py-3">Koi broadcast nahi hai</td></tr>';
+        return;
+      }
+      list.innerHTML = data.broadcasts.map(b => `
+        <tr>
+          <td><strong>${b.title}</strong><br><small class="text-muted">${(b.message || '').substring(0, 60)}...</small></td>
+          <td><span class="badge bg-info">${b.target_audience}</span></td>
+          <td>
+            ${b.status === 'sent' ? '<span class="badge bg-success">Sent</span>' : 
+              b.status === 'scheduled' ? '<span class="badge bg-warning">Scheduled</span>' : 
+              '<span class="badge bg-secondary">Draft</span>'}
+          </td>
+          <td>${b.sent_count || 0}/${b.failed_count || 0}</td>
+          <td><small>${new Date(b.created_at).toLocaleDateString()}</small></td>
+          <td>
+            ${b.status === 'draft' ? `<button onclick="sendBroadcast('${b.id}')" class="btn btn-sm btn-success" title="Send"><i class="fas fa-paper-plane"></i></button>` : ''}
+            <button onclick="deleteBroadcast('${b.id}')" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function saveBroadcast() {
+      const data = {
+        title: document.getElementById('bc-title').value,
+        message: document.getElementById('bc-message').value,
+        target_audience: document.getElementById('bc-target').value
+      };
+      if (!data.title || !data.message) { alert('Title aur message zaruri hain'); return; }
+      const res = await fetch('/api/settings/broadcasts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      if (result.success) {
+        broadcastModal.hide();
+        loadBroadcasts();
+      }
+    }
+
+    async function sendBroadcast(id) {
+      if (!confirm('Broadcast send karein? Yeh message sab customers ko jayega.')) return;
+      const res = await fetch(`/api/settings/broadcasts/${id}/send`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        alert(`✅ Sent: ${data.sent}, Failed: ${data.failed}, Total: ${data.total}`);
+        loadBroadcasts();
+      } else {
+        alert(data.error || 'Send failed');
+      }
+    }
+
+    async function deleteBroadcast(id) {
+      if (!confirm('Delete karein?')) return;
+      await fetch(`/api/settings/broadcasts/${id}`, { method: 'DELETE' });
+      loadBroadcasts();
+    }
+
+    function showAddModal() {
+      document.getElementById('bc-title').value = '';
+      document.getElementById('bc-message').value = '';
+      document.getElementById('bc-target').value = 'all';
+      broadcastModal.show();
+    }
+
+    loadRestaurant();
+    loadBroadcasts();
+  </script>
+</body>
+</html>

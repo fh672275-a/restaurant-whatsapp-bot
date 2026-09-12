@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reservations - Restaurant Bot</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/css/dashboard.css" rel="stylesheet">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo"><i class="fab fa-whatsapp"></i></div>
+        <div><h2 id="rest-name">Restaurant</h2><p>Owner Panel</p></div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/restaurant/dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="/restaurant/orders"><i class="fas fa-shopping-bag"></i> Orders</a>
+        <a href="/restaurant/menu"><i class="fas fa-utensils"></i> Menu</a>
+        <a href="/restaurant/deals"><i class="fas fa-tags"></i> Deals</a>
+        <a href="/restaurant/hours"><i class="fas fa-clock"></i> Hours</a>
+        <a href="/restaurant/delivery"><i class="fas fa-truck"></i> Delivery Areas</a>
+        <a href="/restaurant/customers"><i class="fas fa-users"></i> Customers</a>
+        <a href="/restaurant/feedback"><i class="fas fa-star"></i> Feedback</a>
+        <a href="/restaurant/broadcasts"><i class="fas fa-bullhorn"></i> Broadcasts</a>
+        <a href="/restaurant/reservations" class="active"><i class="fas fa-calendar-check"></i> Reservations</a>
+        <a href="/restaurant/analytics"><i class="fas fa-chart-bar"></i> Analytics</a>
+        <a href="/restaurant/whatsapp"><i class="fab fa-whatsapp"></i> WhatsApp</a>
+        <a href="/restaurant/settings"><i class="fas fa-cog"></i> Settings</a>
+        <a href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <h1><i class="fas fa-calendar-check"></i> Table Reservations</h1>
+      </header>
+
+      <div class="content-body">
+        <div class="alert alert-info">
+          <i class="fas fa-info-circle"></i>
+          Customers WhatsApp par "reservation" ya "table" likh kar booking kar sakte hain. Yahan unki requests aati hain.
+        </div>
+
+        <div class="card">
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Customer</th>
+                    <th>Phone</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Party Size</th>
+                    <th>Special Request</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="reservations-list">
+                  <tr><td colspan="8" class="text-center">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    async function loadRestaurant() {
+      const res = await fetch('/api/restaurants/<%= user.id %>');
+      const data = await res.json();
+      document.getElementById('rest-name').textContent = data.restaurant.name;
+    }
+
+    async function loadReservations() {
+      const res = await fetch('/api/settings/reservations');
+      const data = await res.json();
+      const list = document.getElementById('reservations-list');
+      if (!data.reservations || data.reservations.length === 0) {
+        list.innerHTML = '<tr><td colspan="8" class="text-center py-3">Koi reservation nahi hai</td></tr>';
+        return;
+      }
+      const statusColors = { pending: 'warning', confirmed: 'success', cancelled: 'danger', completed: 'secondary' };
+      list.innerHTML = data.reservations.map(r => `
+        <tr>
+          <td><strong>${r.customer_name || 'Unknown'}</strong></td>
+          <td>${r.customer_phone}</td>
+          <td>${r.reservation_date}</td>
+          <td>${r.reservation_time}</td>
+          <td>${r.party_size} log</td>
+          <td><small>${r.special_request || '-'}</small></td>
+          <td><span class="badge bg-${statusColors[r.status]}">${r.status}</span></td>
+          <td>
+            ${r.status === 'pending' ? `
+              <button onclick="updateStatus('${r.id}', 'confirmed')" class="btn btn-sm btn-success"><i class="fas fa-check"></i></button>
+              <button onclick="updateStatus('${r.id}', 'cancelled')" class="btn btn-sm btn-danger"><i class="fas fa-times"></i></button>
+            ` : ''}
+            ${r.status === 'confirmed' ? `<button onclick="updateStatus('${r.id}', 'completed')" class="btn btn-sm btn-secondary"><i class="fas fa-flag-checkered"></i></button>` : ''}
+            <button onclick="deleteReservation('${r.id}')" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function updateStatus(id, status) {
+      await fetch(`/api/settings/reservations/${id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      loadReservations();
+    }
+
+    async function deleteReservation(id) {
+      if (!confirm('Delete?')) return;
+      await fetch(`/api/settings/reservations/${id}`, { method: 'DELETE' });
+      loadReservations();
+    }
+
+    loadRestaurant();
+    loadReservations();
+  </script>
+</body>
+</html>

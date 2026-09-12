@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analytics - Restaurant Bot</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/css/dashboard.css" rel="stylesheet">
+  <style>
+    .chart-bar {
+      display: flex;
+      align-items: flex-end;
+      height: 200px;
+      gap: 8px;
+      padding: 10px 0;
+      border-bottom: 2px solid #ddd;
+    }
+    .chart-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .bar {
+      width: 100%;
+      background: linear-gradient(180deg, #25D366, #128C7E);
+      border-radius: 6px 6px 0 0;
+      min-height: 4px;
+      transition: height 0.5s;
+    }
+    .hour-bar {
+      background: linear-gradient(180deg, #3498db, #2980b9);
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo"><i class="fab fa-whatsapp"></i></div>
+        <div><h2 id="rest-name">Restaurant</h2><p>Owner Panel</p></div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/restaurant/dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="/restaurant/orders"><i class="fas fa-shopping-bag"></i> Orders</a>
+        <a href="/restaurant/menu"><i class="fas fa-utensils"></i> Menu</a>
+        <a href="/restaurant/deals"><i class="fas fa-tags"></i> Deals</a>
+        <a href="/restaurant/hours"><i class="fas fa-clock"></i> Hours</a>
+        <a href="/restaurant/delivery"><i class="fas fa-truck"></i> Delivery Areas</a>
+        <a href="/restaurant/customers"><i class="fas fa-users"></i> Customers</a>
+        <a href="/restaurant/feedback"><i class="fas fa-star"></i> Feedback</a>
+        <a href="/restaurant/broadcasts"><i class="fas fa-bullhorn"></i> Broadcasts</a>
+        <a href="/restaurant/reservations"><i class="fas fa-calendar-check"></i> Reservations</a>
+        <a href="/restaurant/analytics" class="active"><i class="fas fa-chart-bar"></i> Analytics</a>
+        <a href="/restaurant/whatsapp"><i class="fab fa-whatsapp"></i> WhatsApp</a>
+        <a href="/restaurant/settings"><i class="fas fa-cog"></i> Settings</a>
+        <a href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <h1><i class="fas fa-chart-bar"></i> Analytics & Reports</h1>
+        <select class="form-control" style="width:150px;" id="days-filter" onchange="loadAnalytics()">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="365">Last Year</option>
+        </select>
+      </header>
+
+      <div class="content-body">
+        <!-- Key Metrics -->
+        <div class="stats-grid">
+          <div class="stat-card stat-green">
+            <div class="stat-icon"><i class="fas fa-shopping-bag"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="total-orders">-</div>
+              <div class="stat-label">Total Orders</div>
+            </div>
+          </div>
+          <div class="stat-card stat-blue">
+            <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="total-revenue">-</div>
+              <div class="stat-label">Revenue</div>
+            </div>
+          </div>
+          <div class="stat-card stat-orange">
+            <div class="stat-icon"><i class="fas fa-receipt"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="avg-order">-</div>
+              <div class="stat-label">Avg Order Value</div>
+            </div>
+          </div>
+          <div class="stat-card stat-purple">
+            <div class="stat-icon"><i class="fas fa-users"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="total-customers">-</div>
+              <div class="stat-label">Customers</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Order Status Breakdown -->
+        <div class="card mt-4">
+          <div class="card-header"><h3>Order Status Breakdown</h3></div>
+          <div class="card-body">
+            <div class="row text-center" id="status-breakdown"></div>
+          </div>
+        </div>
+
+        <!-- Revenue Trend -->
+        <div class="card mt-4">
+          <div class="card-header"><h3>Daily Revenue (Last 30 Days)</h3></div>
+          <div class="card-body">
+            <div class="chart-bar" id="revenue-chart"></div>
+          </div>
+        </div>
+
+        <!-- Top Items -->
+        <div class="card mt-4">
+          <div class="card-header"><h3>Top Selling Items</h3></div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr><th>#</th><th>Item Name</th><th>Qty Sold</th><th>Revenue</th></tr>
+                </thead>
+                <tbody id="top-items">
+                  <tr><td colspan="4" class="text-center">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Busy Hours -->
+        <div class="card mt-4">
+          <div class="card-header"><h3>Busy Hours (Order Volume by Hour)</h3></div>
+          <div class="card-body">
+            <div class="chart-bar" id="hourly-chart"></div>
+          </div>
+        </div>
+
+        <!-- Customer Insights -->
+        <div class="row mt-4">
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header"><h3>Customer Insights</h3></div>
+              <div class="card-body" id="customer-insights"></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header"><h3>Feedback Summary</h3></div>
+              <div class="card-body" id="feedback-summary"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    async function loadRestaurant() {
+      const res = await fetch('/api/restaurants/<%= user.id %>');
+      const data = await res.json();
+      document.getElementById('rest-name').textContent = data.restaurant.name;
+    }
+
+    async function loadAnalytics() {
+      const days = document.getElementById('days-filter').value;
+      const res = await fetch(`/api/settings/analytics?days=${days}`);
+      const data = await res.json();
+      const a = data.analytics;
+      
+      // Stats
+      document.getElementById('total-orders').textContent = a.orders.total || 0;
+      document.getElementById('total-revenue').textContent = 'Rs. ' + (a.orders.revenue || 0).toLocaleString();
+      document.getElementById('avg-order').textContent = 'Rs. ' + Math.round(a.orders.avg_order_value || 0).toLocaleString();
+      document.getElementById('total-customers').textContent = a.customers.total || 0;
+      
+      // Status breakdown
+      const sb = document.getElementById('status-breakdown');
+      sb.innerHTML = `
+        <div class="col">
+          <div class="fs-2 text-info">${a.orders.active || 0}</div>
+          <small>Active</small>
+        </div>
+        <div class="col">
+          <div class="fs-2 text-success">${a.orders.delivered || 0}</div>
+          <small>Delivered</small>
+        </div>
+        <div class="col">
+          <div class="fs-2 text-danger">${a.orders.cancelled || 0}</div>
+          <small>Cancelled</small>
+        </div>
+      `;
+      
+      // Revenue chart
+      const chart = document.getElementById('revenue-chart');
+      const maxRev = Math.max(...a.daily.map(d => d.revenue), 1);
+      chart.innerHTML = a.daily.reverse().map(d => `
+        <div class="chart-col">
+          <div class="bar" style="height: ${(d.revenue/maxRev)*180}px;" title="${d.date}: Rs. ${d.revenue}"></div>
+          <small class="text-muted">${new Date(d.date).getDate()}</small>
+        </div>
+      `).join('');
+      
+      // Top items
+      const ti = document.getElementById('top-items');
+      if (a.top_items.length === 0) {
+        ti.innerHTML = '<tr><td colspan="4" class="text-center">No data</td></tr>';
+      } else {
+        ti.innerHTML = a.top_items.map((item, i) => `
+          <tr>
+            <td>${i+1}</td>
+            <td><strong>${item.name}</strong></td>
+            <td>${item.qty}</td>
+            <td>Rs. ${item.revenue.toLocaleString()}</td>
+          </tr>
+        `).join('');
+      }
+      
+      // Hourly chart
+      const hc = document.getElementById('hourly-chart');
+      const maxHour = Math.max(...a.hourly.map(h => h.orders), 1);
+      hc.innerHTML = a.hourly.map(h => `
+        <div class="chart-col">
+          <div class="bar hour-bar" style="height: ${(h.orders/maxHour)*180}px;" title="${h.hour}:00 - ${h.orders} orders"></div>
+          <small class="text-muted">${h.hour}</small>
+        </div>
+      `).join('');
+      
+      // Customer insights
+      document.getElementById('customer-insights').innerHTML = `
+        <div class="mb-2">📊 Total: <strong>${a.customers.total}</strong></div>
+        <div class="mb-2">🟢 Active (7 days): <strong>${a.customers.active_week}</strong></div>
+        <div class="mb-2">📅 Active (30 days): <strong>${a.customers.active_month}</strong></div>
+        <div class="mb-2">⭐ VIP (10+ orders): <strong>${a.customers.vip}</strong></div>
+      `;
+      
+      // Feedback summary
+      const f = a.feedback || {};
+      document.getElementById('feedback-summary').innerHTML = `
+        <div class="mb-2">⭐ Average Rating: <strong>${(f.avg_rating || 0).toFixed(1)}/5</strong></div>
+        <div class="mb-2">💬 Total Feedback: <strong>${f.total || 0}</strong></div>
+        <div class="mb-2">🟢 5 Star: <strong>${f.five_star || 0}</strong></div>
+        <div class="mb-2">🟡 4 Star: <strong>${f.four_star || 0}</strong></div>
+        <div class="mb-2 text-danger">🔴 Negative (1-2): <strong>${f.negative || 0}</strong></div>
+      `;
+    }
+
+    loadRestaurant();
+    loadAnalytics();
+  </script>
+</body>
+</html>

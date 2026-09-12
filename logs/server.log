@@ -1,4 +1,10 @@
 [DB] Database initialized successfully
+[DB] Added column currency to restaurants
+[DB] Added column delivery_fee_default to restaurants
+[DB] Added column min_order_amount to restaurants
+[DB] Added column logo_url to restaurants
+[DB] Added column tax_percentage to restaurants
+[DB] V2 tables verified
 =================================================
   Restaurant WhatsApp Bot System
 =================================================
@@ -12,4 +18,3 @@
 [Startup] All sessions restored.
 
 ✅ System ready! Open dashboard and connect a restaurant WhatsApp.
-[IO] Client connected: dW1FREPGQutBUxRoAAAA

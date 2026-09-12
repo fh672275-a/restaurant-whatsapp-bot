@@ -18,6 +18,147 @@ if (!fs.existsSync(dataDir)) {
 const db = new Database(config.DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+db.pragma('busy_timeout = 5000');
+
+// Add new V2 tables/columns if missing (idempotent - safe to run multiple times)
+function ensureV2Tables() {
+  // New tables
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS menu_item_variations (
+      id TEXT PRIMARY KEY,
+      menu_item_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      price_modifier REAL DEFAULT 0,
+      is_default INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
+    );
+    
+    CREATE TABLE IF NOT EXISTS deals (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      original_price REAL,
+      deal_price REAL NOT NULL,
+      image_url TEXT,
+      is_active INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      valid_from DATETIME,
+      valid_until DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
+    );
+    
+    CREATE TABLE IF NOT EXISTS deal_items (
+      id TEXT PRIMARY KEY,
+      deal_id TEXT NOT NULL,
+      menu_item_id TEXT,
+      custom_name TEXT,
+      quantity INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE CASCADE,
+      FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE SET NULL
+    );
+    
+    CREATE TABLE IF NOT EXISTS operating_hours (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      day_of_week INTEGER NOT NULL,
+      open_time TEXT,
+      close_time TEXT,
+      is_closed INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(restaurant_id, day_of_week),
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
+    );
+    
+    CREATE TABLE IF NOT EXISTS delivery_areas (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      delivery_fee REAL DEFAULT 0,
+      estimated_time TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
+    );
+    
+    CREATE TABLE IF NOT EXISTS customer_feedback (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      order_id TEXT,
+      customer_phone TEXT NOT NULL,
+      customer_name TEXT,
+      rating INTEGER NOT NULL,
+      comment TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+    );
+    
+    CREATE TABLE IF NOT EXISTS broadcasts (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      target_audience TEXT DEFAULT 'all',
+      status TEXT DEFAULT 'draft',
+      sent_count INTEGER DEFAULT 0,
+      failed_count INTEGER DEFAULT 0,
+      scheduled_at DATETIME,
+      sent_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
+    );
+    
+    CREATE TABLE IF NOT EXISTS reservations (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      customer_phone TEXT NOT NULL,
+      customer_name TEXT,
+      party_size INTEGER DEFAULT 2,
+      reservation_date TEXT NOT NULL,
+      reservation_time TEXT NOT NULL,
+      special_request TEXT,
+      status TEXT DEFAULT 'pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_menu_variations_item ON menu_item_variations(menu_item_id);
+    CREATE INDEX IF NOT EXISTS idx_deals_restaurant ON deals(restaurant_id);
+    CREATE INDEX IF NOT EXISTS idx_operating_hours_restaurant ON operating_hours(restaurant_id);
+    CREATE INDEX IF NOT EXISTS idx_delivery_areas_restaurant ON delivery_areas(restaurant_id);
+    CREATE INDEX IF NOT EXISTS idx_feedback_restaurant ON customer_feedback(restaurant_id);
+    CREATE INDEX IF NOT EXISTS idx_broadcasts_restaurant ON broadcasts(restaurant_id);
+    CREATE INDEX IF NOT EXISTS idx_reservations_restaurant ON reservations(restaurant_id);
+  `);
+  
+  // Add columns to restaurants table (idempotent)
+  const columns = [
+    { name: 'currency', type: 'TEXT', default: "'Rs.'" },
+    { name: 'delivery_fee_default', type: 'REAL', default: '100' },
+    { name: 'min_order_amount', type: 'REAL', default: '0' },
+    { name: 'logo_url', type: 'TEXT', default: null },
+    { name: 'tax_percentage', type: 'REAL', default: '0' }
+  ];
+  
+  columns.forEach(col => {
+    try {
+      if (col.default) {
+        db.exec(`ALTER TABLE restaurants ADD COLUMN ${col.name} ${col.type} DEFAULT ${col.default};`);
+      } else {
+        db.exec(`ALTER TABLE restaurants ADD COLUMN ${col.name} ${col.type};`);
+      }
+      console.log(`[DB] Added column ${col.name} to restaurants`);
+    } catch (e) {
+      // Column already exists - ignore
+    }
+  });
+}
 
 /**
  * Initialize database schema
@@ -173,6 +314,10 @@ function initDatabase() {
   }
 
   console.log('[DB] Database initialized successfully');
+  
+  // Ensure V2 tables exist (deals, hours, delivery areas, etc.)
+  ensureV2Tables();
+  console.log('[DB] V2 tables verified');
 }
 
 // Helper for generating IDs

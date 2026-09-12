@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Customers - Restaurant Bot</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/css/dashboard.css" rel="stylesheet">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo"><i class="fab fa-whatsapp"></i></div>
+        <div><h2 id="rest-name">Restaurant</h2><p>Owner Panel</p></div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/restaurant/dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="/restaurant/orders"><i class="fas fa-shopping-bag"></i> Orders</a>
+        <a href="/restaurant/menu"><i class="fas fa-utensils"></i> Menu</a>
+        <a href="/restaurant/deals"><i class="fas fa-tags"></i> Deals</a>
+        <a href="/restaurant/hours"><i class="fas fa-clock"></i> Hours</a>
+        <a href="/restaurant/delivery"><i class="fas fa-truck"></i> Delivery Areas</a>
+        <a href="/restaurant/customers" class="active"><i class="fas fa-users"></i> Customers</a>
+        <a href="/restaurant/feedback"><i class="fas fa-star"></i> Feedback</a>
+        <a href="/restaurant/broadcasts"><i class="fas fa-bullhorn"></i> Broadcasts</a>
+        <a href="/restaurant/reservations"><i class="fas fa-calendar-check"></i> Reservations</a>
+        <a href="/restaurant/analytics"><i class="fas fa-chart-bar"></i> Analytics</a>
+        <a href="/restaurant/whatsapp"><i class="fab fa-whatsapp"></i> WhatsApp</a>
+        <a href="/restaurant/settings"><i class="fas fa-cog"></i> Settings</a>
+        <a href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <h1><i class="fas fa-users"></i> Customers</h1>
+        <input type="text" class="form-control" style="width:250px;" id="search" placeholder="Search by name or phone...">
+      </header>
+
+      <div class="content-body">
+        <div class="stats-grid">
+          <div class="stat-card stat-blue">
+            <div class="stat-icon"><i class="fas fa-users"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="total-customers">-</div>
+              <div class="stat-label">Total Customers</div>
+            </div>
+          </div>
+          <div class="stat-card stat-green">
+            <div class="stat-icon"><i class="fas fa-star"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="vip-customers">-</div>
+              <div class="stat-label">VIP Customers</div>
+            </div>
+          </div>
+          <div class="stat-card stat-orange">
+            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="active-week">-</div>
+              <div class="stat-label">Active (7 days)</div>
+            </div>
+          </div>
+          <div class="stat-card stat-purple">
+            <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
+            <div class="stat-data">
+              <div class="stat-value" id="total-spent">-</div>
+              <div class="stat-label">Total Spent</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mt-4">
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Phone</th>
+                    <th>Orders</th>
+                    <th>Total Spent</th>
+                    <th>Last Seen</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="customers-list">
+                  <tr><td colspan="6" class="text-center">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let allCustomers = [];
+    
+    async function loadRestaurant() {
+      const res = await fetch('/api/restaurants/<%= user.id %>');
+      const data = await res.json();
+      document.getElementById('rest-name').textContent = data.restaurant.name;
+    }
+
+    async function loadCustomers() {
+      const res = await fetch('/api/settings/analytics?days=365');
+      const data = await res.json();
+      // For now we just get stats; full customer list requires an API endpoint
+      // Let's fetch via a direct DB query endpoint we'll add later
+      
+      // Use the orders analytics for stats
+      const stats = data.analytics.customers;
+      document.getElementById('total-customers').textContent = stats.total;
+      document.getElementById('vip-customers').textContent = stats.vip;
+      document.getElementById('active-week').textContent = stats.active_week;
+      
+      // Calculate total spent (rough estimate)
+      const totalRevenue = data.analytics.orders.revenue || 0;
+      document.getElementById('total-spent').textContent = 'Rs. ' + totalRevenue.toLocaleString();
+      
+      // For full customer list, we'd need a dedicated endpoint
+      // For now show the orders-based customers
+      const list = document.getElementById('customers-list');
+      list.innerHTML = '<tr><td colspan="6" class="text-center py-4">Customer list available in analytics. Total customers: ' + stats.total + '</td></tr>';
+    }
+
+    document.getElementById('search').addEventListener('input', (e) => {
+      // Search functionality would filter customers
+    });
+
+    loadRestaurant();
+    loadCustomers();
+  </script>
+</body>
+</html>
