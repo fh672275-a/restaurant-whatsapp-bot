@@ -12,7 +12,11 @@ module.exports = {
   // Session secret for express-session
   SESSION_SECRET: process.env.SESSION_SECRET || 'restaurant-whatsapp-bot-secret-2024-super-secure',
   
-  // Database path
+  // Database config
+  // For local: SQLite file
+  // For cloud: PostgreSQL URL (DATABASE_URL=postgresql://...)
+  DATABASE_URL: process.env.DATABASE_URL || '',
+  USE_POSTGRES: !!(process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('postgres')),
   DB_PATH: path.join(__dirname, '..', 'data', 'app.db'),
   
   // WhatsApp sessions storage
@@ -20,17 +24,14 @@ module.exports = {
   
   // Default super admin credentials (change after first login)
   SUPER_ADMIN: {
-    username: 'admin',
-    password: 'admin123'  // Will be hashed on first run
+    username: process.env.SUPER_ADMIN_USERNAME || 'admin',
+    password: process.env.SUPER_ADMIN_PASSWORD || 'admin123'
   },
   
   // Bot settings
   BOT: {
-    // Auto-greet customers when they first message
     AUTO_GREET: true,
-    // Session timeout for customer orders (minutes)
-    ORDER_SESSION_TIMEOUT: 30,
-    // Max items per order
+    ORDER_SESSION_TIMEOUT: parseInt(process.env.BOT_ORDER_SESSION_TIMEOUT) || 30,
     MAX_ORDER_ITEMS: 50
   },
   

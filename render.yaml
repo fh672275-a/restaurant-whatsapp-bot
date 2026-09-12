@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: restaurant-whatsapp-bot
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: restaurant-bot-db
+          property: connectionString
+    disk:
+      name: data
+      mountPath: /app/data
+      sizeGB: 1
+
+databases:
+  - name: restaurant-bot-db
+    plan: free
+    databaseName: restaurant_bot
+    user: restaurant_user
