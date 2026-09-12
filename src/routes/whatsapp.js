@@ -48,15 +48,37 @@ router.post('/reconnect', requireRestaurantAccess, async (req, res) => {
   res.json(result);
 });
 
-// Send test message (only to own number for testing)
-router.post('/test-message', requireRestaurantAccess, async (req, res) => {
+// Send test message (admin can send to any restaurant)
+router.post('/test-message', async (req, res) => {
+  // Allow both super admin and restaurant
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Login required' });
+  }
+  
+  let restaurantId;
+  if (req.session.user.type === 'restaurant') {
+    restaurantId = req.session.user.id;
+  } else if (req.session.user.type === 'super_admin') {
+    restaurantId = req.query.restaurant_id || req.body.restaurant_id;
+    if (!restaurantId) {
+      // Use first connected restaurant
+      const connected = db.prepare('SELECT id FROM restaurants WHERE whatsapp_connected = 1 LIMIT 1').get();
+      if (!connected) {
+        return res.status(400).json({ error: 'No connected restaurant found' });
+      }
+      restaurantId = connected.id;
+    }
+  } else {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  
   const { phone, message } = req.body;
   if (!phone || !message) {
     return res.status(400).json({ error: 'Phone aur message zaruri hain' });
   }
   try {
-    await waManager.sendMessage(req.restaurantId, phone, message);
-    res.json({ success: true });
+    const result = await waManager.sendMessage(restaurantId, phone, message);
+    res.json({ success: true, messageId: result?.key?.id });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
