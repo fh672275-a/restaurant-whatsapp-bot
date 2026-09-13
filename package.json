@@ -1,13 +1,21 @@
 {
   "name": "restaurant-whatsapp-bot",
   "version": "1.0.0",
-  "description": "Multi-restaurant WhatsApp Business Bot - Order Management System (Roman English)",
+  "description": "Restaurant WhatsApp Bot - AI-Powered Order Management System",
   "main": "server.js",
+  "author": "Restaurant Bot",
+  "license": "MIT",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "build:sqlite": "cd node_modules/better-sqlite3 && npx node-gyp rebuild || echo 'SQLite build skipped (using PostgreSQL)'",
-    "postinstall": "echo 'Installation complete'"
+    "electron": "electron electron/main.js",
+    "electron:dev": "electron electron/main.js --dev",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "build:sqlite": "cd node_modules/better-sqlite3 && npx node-gyp rebuild || echo 'SQLite build skipped'",
+    "postinstall": "electron-builder install-app-deps"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -28,6 +36,61 @@
     "qrcode": "^1.5.4",
     "socket.io": "^4.7.5",
     "z-ai-web-dev-sdk": "^0.0.18"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.restaurantbot.app",
+    "productName": "Restaurant WhatsApp Bot",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "server.js",
+      "src/**/*",
+      "views/**/*",
+      "public/**/*",
+      "electron/**/*",
+      "package.json",
+      "package-lock.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".z-ai-config",
+        "to": ".z-ai-config"
+      },
+      {
+        "from": "node_modules",
+        "to": "node_modules",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "electron/assets/icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "electron/assets/icon.png",
+      "category": "public.app-category.business"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "electron/assets/icon.png",
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "electron/assets/icon.png",
+      "uninstallerIcon": "electron/assets/icon.png",
+      "installerHeaderIcon": "electron/assets/icon.png",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Restaurant Bot"
+    }
   },
   "allowScripts": {
     "better-sqlite3@11.10.0": true,
