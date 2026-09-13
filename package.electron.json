@@ -1,0 +1,46 @@
+{
+  "name": "restaurant-whatsapp-bot-desktop",
+  "version": "1.0.0",
+  "description": "Restaurant WhatsApp Bot - Desktop App (Electron)",
+  "main": "electron/main.js",
+  "author": "Restaurant Bot",
+  "license": "MIT",
+  "scripts": {
+    "electron": "electron electron/main.js",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.restaurantbot.app",
+    "productName": "Restaurant WhatsApp Bot",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "server.js",
+      "src/**/*",
+      "views/**/*",
+      "public/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "electron/assets/icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "electron/assets/icon.png"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "electron/assets/icon.png"
+    }
+  }
+}
