@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bulk Menu Upload - Restaurant Bot</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/css/dashboard.css" rel="stylesheet">
+  <style>
+    .upload-zone {
+      border: 3px dashed #25D366;
+      border-radius: 15px;
+      padding: 40px;
+      text-align: center;
+      transition: all 0.3s;
+      cursor: pointer;
+      background: #f8fff9;
+    }
+    .upload-zone:hover {
+      background: #f0fff4;
+      border-color: #128C7E;
+      transform: translateY(-2px);
+    }
+    .upload-zone.dragover {
+      background: #e8f5e9;
+      border-color: #128C7E;
+    }
+    .upload-icon {
+      font-size: 60px;
+      color: #25D366;
+      margin-bottom: 15px;
+    }
+    .format-card {
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 20px;
+      transition: all 0.2s;
+      cursor: pointer;
+      height: 100%;
+    }
+    .format-card:hover {
+      border-color: #25D366;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(37,211,102,0.2);
+    }
+    .format-card.active {
+      border-color: #25D366;
+      background: #f0fff4;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo"><i class="fab fa-whatsapp"></i></div>
+        <div><h2 id="rest-name">Restaurant</h2><p>Owner Panel</p></div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/restaurant/dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="/restaurant/orders"><i class="fas fa-shopping-bag"></i> Orders</a>
+        <a href="/restaurant/menu"><i class="fas fa-utensils"></i> Menu</a>
+        <a href="/restaurant/bulk-upload" class="active"><i class="fas fa-upload"></i> Bulk Upload</a>
+        <a href="/restaurant/deals"><i class="fas fa-tags"></i> Deals</a>
+        <a href="/restaurant/marketing"><i class="fas fa-bullhorn"></i> Marketing</a>
+        <a href="/restaurant/hours"><i class="fas fa-clock"></i> Hours</a>
+        <a href="/restaurant/delivery"><i class="fas fa-truck"></i> Delivery Areas</a>
+        <a href="/restaurant/customers"><i class="fas fa-users"></i> Customers</a>
+        <a href="/restaurant/feedback"><i class="fas fa-star"></i> Feedback</a>
+        <a href="/restaurant/broadcasts"><i class="fas fa-bullhorn"></i> Broadcasts</a>
+        <a href="/restaurant/reservations"><i class="fas fa-calendar-check"></i> Reservations</a>
+        <a href="/restaurant/analytics"><i class="fas fa-chart-bar"></i> Analytics</a>
+        <a href="/restaurant/whatsapp"><i class="fab fa-whatsapp"></i> WhatsApp</a>
+        <a href="/restaurant/settings"><i class="fas fa-cog"></i> Settings</a>
+        <a href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <h1><i class="fas fa-upload"></i> Bulk Menu Upload</h1>
+        <a href="/api/uploads/template/csv" class="btn btn-outline-success">
+          <i class="fas fa-download"></i> Download CSV Template
+        </a>
+      </header>
+
+      <div class="content-body">
+        <!-- Format Selection -->
+        <div class="card mb-4">
+          <div class="card-body">
+            <h5 class="mb-3"><i class="fas fa-file"></i> Upload Format Select Karein</h5>
+            <div class="row">
+              <div class="col-md-4 mb-3">
+                <div class="format-card active" onclick="selectFormat('csv', this)">
+                  <div class="text-center">
+                    <i class="fas fa-file-csv fa-3x text-success mb-2"></i>
+                    <h5>CSV File</h5>
+                    <p class="text-muted small">Excel se CSV export kar k upload karein</p>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4 mb-3">
+                <div class="format-card" onclick="selectFormat('pdf', this)">
+                  <div class="text-center">
+                    <i class="fas fa-file-pdf fa-3x text-danger mb-2"></i>
+                    <h5>PDF Menu</h5>
+                    <p class="text-muted small">AI PDF se items extract karega</p>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4 mb-3">
+                <div class="format-card" onclick="selectFormat('json', this)">
+                  <div class="text-center">
+                    <i class="fas fa-file-code fa-3x text-warning mb-2"></i>
+                    <h5>JSON File</h5>
+                    <p class="text-muted small">Structured JSON format</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Upload Zone -->
+        <div class="card mb-4">
+          <div class="card-body">
+            <h5 class="mb-3"><i class="fas fa-cloud-upload-alt"></i> File Upload Karein</h5>
+            <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+              <div class="upload-icon">
+                <i class="fas fa-cloud-upload-alt"></i>
+              </div>
+              <h4>File yahan drag karein ya click karein</h4>
+              <p class="text-muted">Max size: 10MB | Format: <span id="current-format">CSV</span></p>
+              <input type="file" id="file-input" style="display:none;" accept=".csv,.pdf,.json">
+            </div>
+            <div id="file-info" class="mt-3" style="display:none;">
+              <div class="alert alert-info">
+                <i class="fas fa-file"></i> <strong id="file-name"></strong>
+                <button onclick="uploadFile()" class="btn btn-success btn-sm float-end">
+                  <i class="fas fa-upload"></i> Upload & Process
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CSV Format Help -->
+        <div class="card mb-4" id="csv-help">
+          <div class="card-body">
+            <h5><i class="fas fa-info-circle"></i> CSV Format Guide</h5>
+            <p>Aap ka CSV file is format mein hona chahiye:</p>
+            <pre class="bg-light p-3 rounded"><code>name,price,category,description
+Chicken Biryani,280,Biryani,Aromatic basmati rice
+Zinger Burger,350,Burgers,Crispy chicken
+Coca Cola 1.5L,130,Beverages,Chilled</code></pre>
+            <p class="text-muted small"><strong>Required columns:</strong> name, price<br>
+            <strong>Optional columns:</strong> category, description</p>
+          </div>
+        </div>
+
+        <!-- JSON Format Help -->
+        <div class="card mb-4" id="json-help" style="display:none;">
+          <div class="card-body">
+            <h5><i class="fas fa-info-circle"></i> JSON Format Guide</h5>
+            <p>JSON file format:</p>
+            <pre class="bg-light p-3 rounded"><code>[
+  {
+    "name": "Chicken Biryani",
+    "price": 280,
+    "category": "Biryani",
+    "description": "Aromatic basmati rice"
+  },
+  {
+    "name": "Zinger Burger",
+    "price": 350,
+    "category": "Burgers"
+  }
+]</code></pre>
+          </div>
+        </div>
+
+        <!-- Result -->
+        <div id="result" class="alert" style="display:none;"></div>
+
+        <!-- Logo Upload -->
+        <div class="card mt-4">
+          <div class="card-header"><h3>Restaurant Logo/Icon</h3></div>
+          <div class="card-body">
+            <p class="text-muted">Apne restaurant ka logo upload karein (PNG, JPG)</p>
+            <div class="upload-zone" onclick="document.getElementById('logo-input').click()">
+              <div class="upload-icon"><i class="fas fa-image"></i></div>
+              <h5>Logo Upload Karein</h5>
+              <p class="text-muted">PNG, JPG, JPEG | Max 5MB</p>
+              <input type="file" id="logo-input" style="display:none;" accept=".png,.jpg,.jpeg,.webp">
+            </div>
+            <div id="logo-preview" class="mt-3 text-center" style="display:none;">
+              <img id="logo-img" src="" alt="Logo" style="max-width: 200px; max-height: 200px; border-radius: 10px;">
+              <p class="text-success mt-2"><i class="fas fa-check-circle"></i> Logo uploaded!</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card mt-4">
+          <div class="card-header"><h3>Quick Actions</h3></div>
+          <div class="card-body">
+            <a href="/api/uploads/template/csv" class="btn btn-outline-primary me-2 mb-2">
+              <i class="fas fa-download"></i> CSV Template
+            </a>
+            <a href="/api/uploads/export/csv" class="btn btn-outline-success me-2 mb-2">
+              <i class="fas fa-file-export"></i> Export Current Menu
+            </a>
+            <button onclick="bulkDelete()" class="btn btn-outline-danger mb-2">
+              <i class="fas fa-trash"></i> Delete All Items
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let selectedFormat = 'csv';
+
+    function selectFormat(format, el) {
+      document.querySelectorAll('.format-card').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      selectedFormat = format;
+      document.getElementById('current-format').textContent = format.toUpperCase();
+      
+      // Update accepted file types
+      const input = document.getElementById('file-input');
+      if (format === 'csv') {
+        input.accept = '.csv';
+        document.getElementById('csv-help').style.display = 'block';
+        document.getElementById('json-help').style.display = 'none';
+      } else if (format === 'pdf') {
+        input.accept = '.pdf';
+        document.getElementById('csv-help').style.display = 'none';
+        document.getElementById('json-help').style.display = 'none';
+      } else if (format === 'json') {
+        input.accept = '.json';
+        document.getElementById('csv-help').style.display = 'none';
+        document.getElementById('json-help').style.display = 'block';
+      }
+      
+      // Reset file input
+      input.value = '';
+      document.getElementById('file-info').style.display = 'none';
+    }
+
+    // Drag and drop
+    const dropZone = document.getElementById('upload-zone');
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        document.getElementById('file-input').files = e.dataTransfer.files;
+        showFileInfo(e.dataTransfer.files[0]);
+      }
+    });
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      if (e.target.files.length) {
+        showFileInfo(e.target.files[0]);
+      }
+    });
+
+    function showFileInfo(file) {
+      document.getElementById('file-name').textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+      document.getElementById('file-info').style.display = 'block';
+    }
+
+    async function uploadFile() {
+      const fileInput = document.getElementById('file-input');
+      if (!fileInput.files.length) {
+        alert('Pehle file select karein');
+        return;
+      }
+      
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const resultDiv = document.getElementById('result');
+      resultDiv.className = 'alert alert-info';
+      resultDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+      resultDiv.style.display = 'block';
+      
+      try {
+        const res = await fetch(`/api/uploads/${selectedFormat}`, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          resultDiv.className = 'alert alert-success';
+          resultDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${data.message}<br>
+            <small>Added: ${data.added} | Failed: ${data.failed || 0}</small>
+            ${data.errors && data.errors.length ? '<br><small>Errors: ' + data.errors.join(', ') + '</small>' : ''}`;
+          
+          // Reset
+          fileInput.value = '';
+          document.getElementById('file-info').style.display = 'none';
+        } else {
+          resultDiv.className = 'alert alert-danger';
+          resultDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${data.error}`;
+        }
+      } catch (e) {
+        resultDiv.className = 'alert alert-danger';
+        resultDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Error: ${e.message}`;
+      }
+    }
+
+    // Logo upload
+    document.getElementById('logo-input').addEventListener('change', async (e) => {
+      if (!e.target.files.length) return;
+      const file = e.target.files[0];
+      const formData = new FormData();
+      formData.append('logo', file);
+      
+      try {
+        const res = await fetch('/api/uploads/logo', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('logo-img').src = data.logoUrl;
+          document.getElementById('logo-preview').style.display = 'block';
+        } else {
+          alert(data.error);
+        }
+      } catch (e) {
+        alert('Upload failed');
+      }
+    });
+
+    async function bulkDelete() {
+      if (!confirm('Kya aap really sab menu items delete karna chahte hain? Yeh action wapas nahi hoga!')) return;
+      if (!confirm('Are you sure? Sab items permanently delete ho jayenge!')) return;
+      
+      try {
+        const res = await fetch('/api/uploads/bulk-delete', { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          alert(data.message);
+        } else {
+          alert(data.error);
+        }
+      } catch (e) {
+        alert('Delete failed');
+      }
+    }
+
+    // Load restaurant name
+    fetch('/api/restaurants/<%= user.id %>').then(r => r.json()).then(d => {
+      document.getElementById('rest-name').textContent = d.restaurant.name;
+    });
+  </script>
+</body>
+</html>

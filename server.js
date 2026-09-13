@@ -35,6 +35,8 @@ const orderRoutes = require('./src/routes/orders');
 const whatsappRoutes = require('./src/routes/whatsapp');
 const dealsRoutes = require('./src/routes/deals');
 const settingsRoutes = require('./src/routes/settings');
+const uploadRoutes = require('./src/routes/uploads');
+const marketingRoutes = require('./src/routes/marketing');
 
 // Import WhatsApp manager
 const waManager = require('./src/whatsapp/manager');
@@ -260,6 +262,22 @@ app.get('/restaurant/analytics', (req, res) => {
   res.render('restaurant-analytics');
 });
 
+// Restaurant - Bulk Menu Upload
+app.get('/restaurant/bulk-upload', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-bulk-upload');
+});
+
+// Restaurant - Marketing
+app.get('/restaurant/marketing', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-marketing');
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/restaurants', restaurantRoutes);
@@ -268,6 +286,11 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/deals', dealsRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/uploads', uploadRoutes);
+app.use('/api/marketing', marketingRoutes);
+
+// Static file serving for uploads (logos, etc.)
+app.use('/data/uploads', express.static(path.join(__dirname, 'data', 'uploads')));
 
 // Socket.io connection
 io.on('connection', (socket) => {

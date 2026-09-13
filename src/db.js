@@ -269,6 +269,22 @@ function initDatabase() {
       FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
     );
     
+    CREATE TABLE IF NOT EXISTS marketing_campaigns (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      type TEXT DEFAULT 'general',
+      target_audience TEXT DEFAULT 'all',
+      status TEXT DEFAULT 'draft',
+      sent_count INTEGER DEFAULT 0,
+      failed_count INTEGER DEFAULT 0,
+      scheduled_at DATETIME,
+      sent_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
+    );
+    
     CREATE INDEX IF NOT EXISTS idx_orders_restaurant ON orders(restaurant_id);
     CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
     CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);
