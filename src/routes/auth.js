@@ -230,21 +230,45 @@ router.post('/restaurant/login', (req, res) => {
     if (!phone || !password) {
       return res.status(400).json({ error: 'Phone aur password zaruri hai' });
     }
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-    const restaurant = db.prepare('SELECT * FROM restaurants WHERE phone = ? OR whatsapp_phone = ?').get(cleanPhone, cleanPhone);
-    if (!restaurant || !bcrypt.compareSync(password, restaurant.password)) {
+    
+    // Normalize phone (same as signup)
+    let cleanPhone = phone.replace(/[^0-9]/g, '');
+    if (cleanPhone.startsWith('92')) cleanPhone = '0' + cleanPhone.substring(2);
+    if (!cleanPhone.startsWith('0')) cleanPhone = '0' + cleanPhone;
+    
+    console.log('[Login] Phone input:', phone, '-> Cleaned:', cleanPhone);
+    
+    // Try to find restaurant with multiple phone formats
+    const restaurant = db.prepare('SELECT * FROM restaurants WHERE phone = ? OR whatsapp_phone = ? OR phone = ? OR whatsapp_phone = ?').get(
+      cleanPhone, cleanPhone, 
+      '92' + cleanPhone.substring(1), '92' + cleanPhone.substring(1)
+    );
+    
+    if (!restaurant) {
+      console.log('[Login] Restaurant not found for phone:', cleanPhone);
       return res.status(401).json({ error: 'Galat phone ya password' });
     }
+    
+    console.log('[Login] Restaurant found:', restaurant.name, '| Phone:', restaurant.phone);
+    
+    if (!bcrypt.compareSync(password, restaurant.password)) {
+      console.log('[Login] Password mismatch for:', restaurant.name);
+      return res.status(401).json({ error: 'Galat phone ya password' });
+    }
+    
     if (!restaurant.is_active) {
       return res.status(403).json({ error: 'Aap ka account deactivate hai. Support se rabta karein.' });
     }
+    
     req.session.user = {
       id: restaurant.id,
       name: restaurant.name,
       type: 'restaurant'
     };
+    console.log('[Login] Success! Session set for:', restaurant.name);
     res.json({ success: true, redirect: '/restaurant/dashboard' });
   } catch (e) {
+    console.error('[Login] Error:', e.message);
     res.status(500).json({ error: 'Server error: ' + e.message });
   }
 });
