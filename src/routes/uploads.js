@@ -208,84 +208,102 @@ router.post('/json', requireRestaurantAccess, upload.single('file'), (req, res) 
   }
 });
 
-// ============ PDF UPLOAD (AI extraction) ============
+// ============ PDF UPLOAD (AI Vision extraction) ============
 router.post('/pdf', requireRestaurantAccess, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     
-    // Read PDF and extract text using z-ai (VLM can read PDF as image)
-    // For simplicity, use pdf-parse if available, else use AI
-    let pdfText = '';
+    const fs2 = require('fs');
+    const path2 = require('path');
     
-    try {
-      const pdfParse = require('pdf-parse');
-      const pdfData = await pdfParse(fs.readFileSync(req.file.path));
-      pdfText = pdfData.text;
-    } catch (e) {
-      // pdf-parse not available, try alternative
-      return res.status(400).json({ 
-        error: 'PDF parsing not available. Please use CSV or JSON format instead.',
-        alternative: 'Convert your menu to CSV format and upload that.'
-      });
-    }
+    // Read PDF file as base64 and use AI Vision (VLM) to extract menu items
+    const pdfBuffer = fs2.readFileSync(req.file.path);
+    const base64Pdf = pdfBuffer.toString('base64');
     
-    if (!pdfText || pdfText.trim().length === 0) {
-      fs.unlinkSync(req.file.path);
-      return res.status(400).json({ error: 'No text could be extracted from PDF' });
-    }
-    
-    // Use AI to parse menu items from text
+    // Use z-ai Vision API (VLM) - it can read PDF as image
     const ZAI = require('z-ai-web-dev-sdk').default;
     const zai = await ZAI.create();
     
-    const completion = await zai.chat.completions.create({
+    console.log('[PDF Upload] Sending to AI Vision for extraction...');
+    
+    const completion = await zai.chat.completions.createVision({
       messages: [
         {
-          role: 'assistant',
-          content: `You are a menu parser. Extract menu items from the text below.
-Return ONLY a JSON array (no markdown). Format:
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `You are a menu parser. Extract ALL menu items from this restaurant menu PDF.
+Return ONLY a valid JSON array (no markdown, no explanation). Format:
 [{"name": "Item Name", "price": 100, "category": "Category", "description": "Description"}]
 
 Rules:
-- Extract all menu items with their prices
-- Price should be numeric only (no currency symbol)
+- Extract every menu item with its price
+- Price should be numeric only (no currency symbols like Rs, $, etc)
 - If category not clear, use "Other"
 - Description optional (empty string if not available)
-- Return ONLY the JSON array`
-        },
-        {
-          role: 'user',
-          content: `Menu text:\n${pdfText.substring(0, 5000)}`
+- Look for: item names, prices, categories, descriptions
+- Return ONLY the JSON array, nothing else`
+            },
+            {
+              type: 'file_url',
+              file_url: {
+                url: `data:application/pdf;base64,${base64Pdf}`
+              }
+            }
+          ]
         }
       ],
-      thinking: { type: 'disabled' },
-      temperature: 0,
-      max_tokens: 2000
+      thinking: { type: 'disabled' }
     });
     
     let aiResponse = completion.choices[0]?.message?.content?.trim();
+    
+    if (!aiResponse) {
+      fs2.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'AI could not extract items from PDF' });
+    }
+    
+    // Clean markdown if present
     if (aiResponse.includes('```')) {
       aiResponse = aiResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     }
     
-    const items = JSON.parse(aiResponse);
+    // Try to find JSON array in response
+    const jsonMatch = aiResponse.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      fs2.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'No items found in PDF', rawResponse: aiResponse.substring(0, 200) });
+    }
+    
+    const items = JSON.parse(jsonMatch[0]);
     
     if (!Array.isArray(items) || items.length === 0) {
-      fs.unlinkSync(req.file.path);
-      return res.status(400).json({ error: 'No items found in PDF' });
+      fs2.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'No valid items extracted from PDF' });
     }
     
     const results = bulkAddMenuItems(req.restaurantId, items);
-    fs.unlinkSync(req.file.path);
+    fs2.unlinkSync(req.file.path);
     
     res.json({
       success: true,
       added: results.added,
       failed: results.failed,
-      message: `${results.added} items extracted from PDF and added!`
+      message: `${results.added} items extracted from PDF and added!${results.failed > 0 ? ` ${results.failed} failed.` : ''}`
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('[PDF Upload] Error:', e.message);
+    
+    // Cleanup file
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    
+    res.status(500).json({ 
+      error: `PDF processing failed: ${e.message}`,
+      alternative: 'Please try CSV format or check if PDF is valid.'
+    });
   }
 });
 

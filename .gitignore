@@ -36,3 +36,5 @@ upload/
 skills/
 upload/
 scripts/
+.z-ai-config
+data/uploads/

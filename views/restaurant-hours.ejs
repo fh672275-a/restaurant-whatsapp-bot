@@ -49,6 +49,19 @@
             </div>
             
             <h5 class="mb-3">Weekly Schedule</h5>
+            
+            <div class="card mb-3" style="background: #f0fff4; border: 2px solid #25D366;">
+              <div class="card-body py-2">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="open-247" onchange="toggle247()" style="width: 20px; height: 20px;">
+                  <label class="form-check-label ms-2" for="open-247" style="font-size: 16px; font-weight: 600; color: #075E54;">
+                    <i class="fas fa-infinity text-success"></i> 24 Hours Open (24/7)
+                  </label>
+                  <small class="d-block text-muted mt-1 ms-4">Agar restaurant 24 ghante khulta hai to yeh select karein. Bot hamesha active rahega.</small>
+                </div>
+              </div>
+            </div>
+            
             <div id="hours-form"></div>
             
             <button onclick="saveHours()" class="btn btn-success mt-3">
@@ -93,6 +106,34 @@
       const data = await res.json();
       hoursData = data.hours || [];
       renderForm();
+      
+      // Check if already 24/7 mode
+      const is247 = hoursData.length === 7 && hoursData.every(h => h.open_time === '00:00' && h.close_time === '23:59' && !h.is_closed);
+      document.getElementById('open-247').checked = is247;
+      if (is247) {
+        toggle247();
+      }
+    }
+
+    function toggle247() {
+      const checked = document.getElementById('open-247').checked;
+      for (let i = 0; i < 7; i++) {
+        const closedCheckbox = document.getElementById(`closed-${i}`);
+        const openInput = document.getElementById(`open-${i}`);
+        const closeInput = document.getElementById(`close-${i}`);
+        if (checked) {
+          closedCheckbox.checked = false;
+          closedCheckbox.disabled = true;
+          openInput.value = '00:00';
+          openInput.disabled = true;
+          closeInput.value = '23:59';
+          closeInput.disabled = true;
+        } else {
+          closedCheckbox.disabled = false;
+          openInput.disabled = closedCheckbox.checked;
+          closeInput.disabled = closedCheckbox.checked;
+        }
+      }
     }
 
     function renderForm() {
