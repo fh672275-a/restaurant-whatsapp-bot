@@ -285,6 +285,32 @@ function initDatabase() {
       FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
     );
     
+    CREATE TABLE IF NOT EXISTS payments (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      plan_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      currency TEXT DEFAULT 'PKR',
+      payment_method TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      transaction_id TEXT,
+      paid_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
+    );
+    
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY,
+      restaurant_id TEXT NOT NULL,
+      plan_id TEXT NOT NULL,
+      payment_id TEXT,
+      status TEXT DEFAULT 'active',
+      valid_from DATETIME,
+      valid_until DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
+    );
+    
     CREATE INDEX IF NOT EXISTS idx_orders_restaurant ON orders(restaurant_id);
     CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
     CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);

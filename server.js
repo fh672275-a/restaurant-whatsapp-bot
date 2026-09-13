@@ -37,6 +37,7 @@ const dealsRoutes = require('./src/routes/deals');
 const settingsRoutes = require('./src/routes/settings');
 const uploadRoutes = require('./src/routes/uploads');
 const marketingRoutes = require('./src/routes/marketing');
+const paymentRoutes = require('./src/routes/payments');
 
 // Import WhatsApp manager
 const waManager = require('./src/whatsapp/manager');
@@ -288,6 +289,7 @@ app.use('/api/deals', dealsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/marketing', marketingRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Static file serving for uploads (logos, etc.)
 app.use('/data/uploads', express.static(path.join(__dirname, 'data', 'uploads')));
