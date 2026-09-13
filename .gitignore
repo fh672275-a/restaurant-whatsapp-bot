@@ -38,3 +38,5 @@ upload/
 scripts/
 .z-ai-config
 data/uploads/
+dist/
+electron-bin/
