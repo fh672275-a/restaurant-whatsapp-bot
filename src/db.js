@@ -338,7 +338,14 @@ function initDatabase() {
     console.log('[DB] Super admin created. Username: admin, Password: admin123');
   }
 
-  console.log('[DB] Database initialized successfully');
+  
+  // Add new columns for payments/subscriptions
+  try { db.exec('ALTER TABLE restaurants ADD COLUMN subscription_plan TEXT'); } catch(e) {}
+  try { db.exec('ALTER TABLE payments ADD COLUMN screenshot_path TEXT'); } catch(e) {}
+  try { db.exec('ALTER TABLE payments ADD COLUMN notes TEXT'); } catch(e) {}
+  try { db.exec('ALTER TABLE subscriptions ADD COLUMN trial INTEGER DEFAULT 0'); } catch(e) {}
+
+console.log('[DB] Database initialized successfully');
 }
 
 // Helper for generating IDs

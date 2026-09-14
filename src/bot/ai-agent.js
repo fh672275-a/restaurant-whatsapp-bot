@@ -77,46 +77,86 @@ async function generateResponse(restaurant, customer, customerMessage, context =
 }
 
 /**
- * Build system prompt - natural conversation
+ * Build system prompt - ChatGPT style unlimited conversation
  */
 function buildSystemPrompt(restaurant, customer, context) {
   const {
     menuItems = [],
+    deals = [],
+    operatingHours = [],
+    deliveryAreas = [],
     isOpen = true,
+    closingTime = null,
+    recentOrders = [],
+    isVIP = false,
+    isReturning = false,
     cart = []
   } = context;
 
   let menuSummary = 'Menu khaali hai';
   if (menuItems.length > 0) {
-    menuSummary = menuItems.slice(0, 15).map(m => `${m.name} (Rs. ${m.price})`).join(', ');
+    const categories = {};
+    menuItems.forEach(item => {
+      const cat = item.category_name || 'Other';
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push(`${item.name} (Rs. ${item.price})`);
+    });
+    menuSummary = Object.entries(categories)
+      .map(([cat, items]) => `${cat}: ${items.join(', ')}`)
+      .join('\n');
+  }
+
+  let dealsSummary = 'No active deals';
+  if (deals.length > 0) {
+    dealsSummary = deals.map(d => `${d.name} - Rs. ${d.deal_price}${d.original_price ? ` (was Rs. ${d.original_price})` : ''}`).join(', ');
   }
 
   let cartSummary = '';
   if (cart.length > 0) {
     const subtotal = cart.reduce((s, i) => s + (i.qty * i.price), 0);
-    cartSummary = `\n\nCART (${cart.length} items, Rs. ${subtotal}):\n${cart.map(i => `${i.qty}x ${i.name}`).join(', ')}`;
+    cartSummary = `\n\nCURRENT CART: ${cart.map(i => `${i.qty}x ${i.name} (Rs. ${i.qty * i.price})`).join(', ')} = Rs. ${subtotal}`;
   }
 
-  return `Aap ${restaurant.name} k yahan ek dostana agent ho. Roman Urdu mein baat karein jaise dost WhatsApp par baat karte hain.
+  return `Aap ${restaurant.name} k yahan ek dostana agent ho. ChatGPT ki tarah natural aur intelligent conversation karein - unlimited topics, lekin restaurant k context mein.
 
-IMPORTANT RULES:
-- Sirf 1-2 lines reply karein (choti messages like real WhatsApp)
-- Emojis use karein lekin zyada nahi
-- Natural aur friendly tone
-- Kabhi bhi "main ek AI hoon" ya "bot" mat bolen
-- Agar customer kuch order kare to cart mein add karein aur confirm karein
-- Agar customer item ka naam likhe to usay cart mein add karein (quantity 1 default)
-- Agar customer "2x" ya "2 plate" likhe tabhi quantity 2 karein
-- Prices ko quantity mat samajhein!
-- Agar restaurant band ho to customer ko batayein
+Aap ki personality:
+- Friendly, warm, helpful - jaise ek dost baat kar raha ho
+- Roman Urdu/English mix (Pakistani WhatsApp style)
+- Short replies (1-2 lines, max 3) - real WhatsApp texting style
+- Use 1-2 emojis naturally (not excessive)
+- NEVER say "main ek AI hoon" ya "bot" - aap ek real insaan ho
+- Natural curiosity - customer se puch lein kya chahte hain
+
+Aap kya kar sakte hain:
+- Restaurant k baare mein HAR tarah ki baat karein (food, service, hours, etc)
+- Orders lein, menu suggest karein
+- General chat - weather, greetings, small talk
+- Customer k sawalon ka natural jawab dein
+- Cart manage karein, items add/remove karein
+- Checkout flow handle karein
+
+CRITICAL RULES:
+- Quantity sirf tabhi badhao jab customer EXPLICITLY bole (2x, 2 plates, do, etc)
+- Prices ko quantity mat samajho!
+- 1 message mein 1 item add karo (natural flow)
+- Agar customer kuch order kare to confirm karo
+- Restaurant band ho to batao
+- Natural conversation jaise ChatGPT karta hai - har sawal ka jawab do
 
 Restaurant: ${restaurant.name}
 Phone: ${restaurant.phone}
-Status: ${isOpen ? 'OPEN' : 'CLOSED'}
-Menu: ${menuSummary}
+Address: ${restaurant.address || 'N/A'}
+Status: ${isOpen ? 'OPEN' : 'CLOSED'}${closingTime ? ` (closes ${closingTime})` : ''}
+Delivery Fee: Rs. ${restaurant.delivery_fee_default || 100}
+
+MENU:
+${menuSummary}
+
+ACTIVE DEALS:
+${dealsSummary}
 ${cartSummary}
 
-Customer: ${customer?.name || 'Naya customer'}`;
+Customer: ${customer?.name || 'Naya customer'}${isVIP ? ' (VIP!)' : ''}${isReturning ? ' (Returning)' : ''}`;
 }
 
 /**

@@ -1,212 +1,164 @@
 /**
- * Pricing Plans Configuration
+ * Pricing Plans Configuration - ACTIVATED
  * 
- * NOTE: These plans are saved but NOT yet activated.
- * Will be activated when user says so.
- * 
- * Pricing as per user's request (Pakistan market):
- * 1. Starter Plan - Rs. 3,000/month
- * 2. Pro Plan - Rs. 5,000/month (Most Popular)
- * 3. Business Plan - Rs. 8,500/month
- * 4. Enterprise Plan - Rs. 18,500/month
+ * 4 Plans with 3-day free trial
+ * Payment via EasyPaisa/JazzCash: 03494117212 (Muhammad Ashraf)
  */
 
 const PRICING_PLANS = {
   starter: {
     id: 'starter',
     name: 'Starter Plan',
-    nameUrdu: 'Starter Plan',
     price: 3000,
     currency: 'PKR',
     interval: 'month',
     popular: false,
-    active: false,
+    active: true,
+    freeTrialDays: 3,
     features: {
       maxRestaurants: 1,
       maxMenuItems: -1,
       maxOrdersPerMonth: 500,
       maxDeals: 5,
       whatsappBot: true,
-      whatsappBot24x7: true,
-      orderManagement: true,
       bulkMenuUpload: true,
-      bulkUploadFormats: ['csv', 'pdf', 'json'],
       analytics: 'basic',
-      customerSupport: 'email',
       marketing: false,
       aiMarketing: false,
-      reservations: false,
-      feedback: false,
-      broadcastMessages: false,
-      logoUpload: true,
-      customBranding: false,
-      apiAccess: false,
-      multiBranch: false
+      logoUpload: true
     },
-    description: 'Perfect for single restaurant starting up',
-    descriptionUrdu: 'Naye restaurants k liye perfect'
+    description: 'Single restaurant - perfect for starting'
   },
   
   pro: {
     id: 'pro',
     name: 'Pro Plan',
-    nameUrdu: 'Pro Plan',
     price: 5000,
     currency: 'PKR',
     interval: 'month',
     popular: true,
-    active: false,
+    active: true,
+    freeTrialDays: 3,
     features: {
       maxRestaurants: 1,
       maxMenuItems: -1,
       maxOrdersPerMonth: -1,
       maxDeals: -1,
       whatsappBot: true,
-      whatsappBot24x7: true,
-      orderManagement: true,
       bulkMenuUpload: true,
-      bulkUploadFormats: ['csv', 'pdf', 'json'],
       analytics: 'advanced',
-      customerSupport: 'priority_email',
       marketing: true,
       aiMarketing: true,
       aiMarketingAdsPerMonth: 50,
       reservations: true,
       feedback: true,
       broadcastMessages: true,
-      maxBroadcastsPerMonth: 20,
       logoUpload: true,
-      customBranding: false,
-      apiAccess: false,
-      multiBranch: false,
       deliveryAreas: true,
-      operatingHours: true,
-      customDomain: false
+      operatingHours: true
     },
-    description: 'Most popular - full features for growing restaurants',
-    descriptionUrdu: 'Sab se popular - growing restaurants k liye'
+    description: 'Most popular - full features'
   },
   
   business: {
     id: 'business',
     name: 'Business Plan',
-    nameUrdu: 'Business Plan',
     price: 8500,
     currency: 'PKR',
     interval: 'month',
     popular: false,
-    active: false,
+    active: true,
+    freeTrialDays: 3,
     features: {
       maxRestaurants: 5,
       maxMenuItems: -1,
       maxOrdersPerMonth: -1,
-      maxDeals: -1,
       whatsappBot: true,
-      whatsappBot24x7: true,
-      orderManagement: true,
       bulkMenuUpload: true,
-      bulkUploadFormats: ['csv', 'pdf', 'json'],
       analytics: 'advanced',
-      customerSupport: 'phone',
       marketing: true,
       aiMarketing: true,
       aiMarketingAdsPerMonth: 200,
       reservations: true,
       feedback: true,
       broadcastMessages: true,
-      maxBroadcastsPerMonth: -1,
       logoUpload: true,
       customBranding: true,
       apiAccess: true,
       multiBranch: true,
       maxBranches: 5,
-      deliveryAreas: true,
-      operatingHours: true,
-      customDomain: true,
       prioritySupport: true
     },
-    description: 'Multi-branch restaurants with advanced features',
-    descriptionUrdu: 'Multi-branch restaurants k liye'
+    description: 'Multi-branch restaurants'
   },
   
   enterprise: {
     id: 'enterprise',
     name: 'Enterprise Plan',
-    nameUrdu: 'Enterprise Plan',
     price: 18500,
     currency: 'PKR',
     interval: 'month',
     popular: false,
-    active: false,
+    active: true,
+    freeTrialDays: 3,
     features: {
       maxRestaurants: -1,
-      maxMenuItems: -1,
-      maxOrdersPerMonth: -1,
-      maxDeals: -1,
       whatsappBot: true,
-      whatsappBot24x7: true,
-      orderManagement: true,
       bulkMenuUpload: true,
-      bulkUploadFormats: ['csv', 'pdf', 'json'],
       analytics: 'enterprise',
-      customerSupport: 'dedicated_manager',
       marketing: true,
       aiMarketing: true,
       aiMarketingAdsPerMonth: -1,
-      reservations: true,
-      feedback: true,
-      broadcastMessages: true,
-      maxBroadcastsPerMonth: -1,
-      logoUpload: true,
-      customBranding: true,
-      apiAccess: true,
       multiBranch: true,
       maxBranches: -1,
-      deliveryAreas: true,
-      operatingHours: true,
-      customDomain: true,
+      customBranding: true,
+      apiAccess: true,
       prioritySupport: true,
       dedicatedServer: true,
-      sla: true,
       whiteLabel: true,
       training: true
     },
-    description: 'Large chains with dedicated infrastructure',
-    descriptionUrdu: 'Bare restaurant chains k liye'
+    description: 'Large chains with dedicated infrastructure'
   }
 };
 
 const PAYMENT_METHODS = {
-  jazzcash: {
-    id: 'jazzcash',
-    name: 'JazzCash',
-    active: true,
-    icon: 'mobile-alt'
-  },
   easypaisa: {
     id: 'easypaisa',
     name: 'EasyPaisa',
     active: true,
-    icon: 'wallet'
+    accountName: 'Muhammad Ashraf',
+    accountNumber: '03494117212',
+    whatsappNumber: '03494117212',
+    instructions: 'EasyPaisa app se 03494117212 (Muhammad Ashraf) par payment karein, phir screenshot WhatsApp par bhejein'
   },
-  bank: {
-    id: 'bank',
-    name: 'Bank Transfer',
+  jazzcash: {
+    id: 'jazzcash',
+    name: 'JazzCash',
     active: true,
-    icon: 'university'
+    accountName: 'Muhammad Ashraf',
+    accountNumber: '03494117212',
+    whatsappNumber: '03494117212',
+    instructions: 'JazzCash app se 03494117212 (Muhammad Ashraf) par payment karein, phir screenshot WhatsApp par bhejein'
   }
 };
+
+const ADMIN_ACCESS_CODE = 'Joai5663@@';
+const EASYPAISA_NUMBER = '03494117212';
+const EASYPAISA_NAME = 'Muhammad Ashraf';
 
 module.exports = {
   PRICING_PLANS,
   PAYMENT_METHODS,
+  ADMIN_ACCESS_CODE,
+  EASYPAISA_NUMBER,
+  EASYPAISA_NAME,
   getPlan: (planId) => PRICING_PLANS[planId] || null,
   getActivePlans: () => Object.values(PRICING_PLANS).filter(p => p.active),
   hasFeature: (planId, feature) => {
     const plan = PRICING_PLANS[planId];
     if (!plan) return false;
-    return plan.features[feature] === true || 
-           (typeof plan.features[feature] === 'number' && plan.features[feature] !== 0);
+    return plan.features[feature] === true;
   },
   getLimit: (planId, feature) => {
     const plan = PRICING_PLANS[planId];
