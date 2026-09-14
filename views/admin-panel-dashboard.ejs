@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/css/dashboard.css" rel="stylesheet">
+  <style>
+    body { background: #0a0a0a; }
+    .sidebar { background: #111; border-right: 1px solid #333; }
+    .sidebar-header { border-bottom: 1px solid #333; }
+    .sidebar-header h2 { color: #ff6600; }
+    .sidebar-nav a { color: #aaa; }
+    .sidebar-nav a:hover { background: rgba(255,102,0,0.1); color: #fff; }
+    .sidebar-nav a.active { background: #ff6600; color: #fff; }
+    .main-content { background: #0a0a0a; }
+    .top-bar { background: #111; border-bottom: 1px solid #333; }
+    .top-bar h1 { color: #fff; }
+    .card { background: #1a1a1a; border: 1px solid #333; color: #fff; }
+    .card-header { background: #111; border-bottom: 1px solid #333; color: #fff; }
+    .stat-card { border-left: 4px solid #ff6600; }
+    .stat-value { color: #ff6600; }
+    .stat-label { color: #888; }
+    table { color: #ddd; }
+    table thead th { background: #111; color: #888; border-color: #333; }
+    table tbody td { border-color: #333; color: #ddd; }
+    table tbody tr:hover { background: #1a1a1a; }
+    .badge { font-size: 11px; }
+    .btn-verify { background: #28a745; color: white; border: none; }
+    .btn-reject { background: #dc3545; color: white; border: none; }
+    .btn-view { background: #ff6600; color: white; border: none; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo"><i class="fas fa-shield-alt" style="color:#ff6600;"></i></div>
+        <div><h2>Admin Panel</h2><p>System Control</p></div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="#" onclick="showSection('dashboard')" class="active" id="nav-dashboard">
+          <i class="fas fa-tachometer-alt"></i> Dashboard
+        </a>
+        <a href="#" onclick="showSection('restaurants')" id="nav-restaurants">
+          <i class="fas fa-store"></i> Restaurants
+        </a>
+        <a href="#" onclick="showSection('payments')" id="nav-payments">
+          <i class="fas fa-money-bill-wave"></i> Payments
+        </a>
+        <a href="#" onclick="showSection('subscriptions')" id="nav-subscriptions">
+          <i class="fas fa-star"></i> Subscriptions
+        </a>
+        <a href="#" onclick="showSection('orders')" id="nav-orders">
+          <i class="fas fa-shopping-bag"></i> Orders
+        </a>
+        <a href="#" onclick="showSection('analytics')" id="nav-analytics">
+          <i class="fas fa-chart-bar"></i> Analytics
+        </a>
+        <a href="/admin-panel" onclick="logout()">
+          <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <h1 id="page-title">Dashboard</h1>
+        <div style="color:#ff6600;font-size:14px;">
+          <i class="fas fa-shield-alt"></i> Secure Admin Access
+        </div>
+      </header>
+
+      <div class="content-body">
+        <!-- Dashboard Section -->
+        <div id="section-dashboard">
+          <div class="stats-grid">
+            <div class="stat-card card">
+              <div class="stat-icon"><i class="fas fa-store" style="color:#ff6600;"></i></div>
+              <div class="stat-data">
+                <div class="stat-value" id="stat-restaurants">-</div>
+                <div class="stat-label">Total Restaurants</div>
+              </div>
+            </div>
+            <div class="stat-card card">
+              <div class="stat-icon"><i class="fab fa-whatsapp" style="color:#25D366;"></i></div>
+              <div class="stat-data">
+                <div class="stat-value" id="stat-whatsapp">-</div>
+                <div class="stat-label">WhatsApp Connected</div>
+              </div>
+            </div>
+            <div class="stat-card card">
+              <div class="stat-icon"><i class="fas fa-money-bill-wave" style="color:#28a745;"></i></div>
+              <div class="stat-data">
+                <div class="stat-value" id="stat-revenue">-</div>
+                <div class="stat-label">Total Revenue</div>
+              </div>
+            </div>
+            <div class="stat-card card">
+              <div class="stat-icon"><i class="fas fa-clock" style="color:#ffc107;"></i></div>
+              <div class="stat-data">
+                <div class="stat-value" id="stat-pending">-</div>
+                <div class="stat-label">Pending Payments</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-4">
+            <div class="card-header"><h3>Recent Payments</h3></div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="table">
+                  <thead>
+                    <tr><th>Restaurant</th><th>Plan</th><th>Amount</th><th>Method</th><th>Status</th><th>Action</th></tr>
+                  </thead>
+                  <tbody id="recent-payments">
+                    <tr><td colspan="6" class="text-center">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Restaurants Section -->
+        <div id="section-restaurants" style="display:none;">
+          <div class="card">
+            <div class="card-header"><h3>All Restaurants (<span id="restaurants-count">0</span>)</h3></div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="table">
+                  <thead>
+                    <tr><th>Name</th><th>Phone</th><th>WhatsApp</th><th>Plan</th><th>Orders</th><th>Revenue</th><th>Status</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody id="restaurants-list">
+                    <tr><td colspan="8" class="text-center">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Payments Section -->
+        <div id="section-payments" style="display:none;">
+          <div class="card">
+            <div class="card-header"><h3>All Payments (<span id="payments-count">0</span>)</h3></div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="table">
+                  <thead>
+                    <tr><th>Restaurant</th><th>Plan</th><th>Amount</th><th>Method</th><th>Status</th><th>Date</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody id="payments-list">
+                    <tr><td colspan="7" class="text-center">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subscriptions Section -->
+        <div id="section-subscriptions" style="display:none;">
+          <div class="card">
+            <div class="card-header"><h3>All Subscriptions</h3></div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="table">
+                  <thead>
+                    <tr><th>Restaurant</th><th>Plan</th><th>Status</th><th>Trial</th><th>Valid Until</th><th>Created</th></tr>
+                  </thead>
+                  <tbody id="subscriptions-list">
+                    <tr><td colspan="6" class="text-center">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Orders Section -->
+        <div id="section-orders" style="display:none;">
+          <div class="card">
+            <div class="card-header"><h3>All Orders (Last 100)</h3></div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="table">
+                  <thead>
+                    <tr><th>Restaurant</th><th>Customer</th><th>Phone</th><th>Total</th><th>Status</th><th>Date</th></tr>
+                  </thead>
+                  <tbody id="orders-list">
+                    <tr><td colspan="6" class="text-center">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Analytics Section -->
+        <div id="section-analytics" style="display:none;">
+          <div class="stats-grid">
+            <div class="stat-card card">
+              <div class="stat-icon"><i class="fas fa-users" style="color:#007bff;"></i></div>
+              <div class="stat-data">
+                <div class="stat-value" id="analytics-customers">-</div>
+                <div class="stat-label">Total Customers</div>
+              </div>
+            </div>
+            <div class="stat-card card">
+              <div class="stat-icon"><i class="fas fa-shopping-bag" style="color:#28a745;"></i></div>
+              <div class="stat-data">
+                <div class="stat-value" id="analytics-orders">-</div>
+                <div class="stat-label">Total Orders</div>
+              </div>
+            </div>
+            <div class="stat-card card">
+              <div class="stat-icon"><i class="fas fa-check-circle" style="color:#25D366;"></i></div>
+              <div class="stat-data">
+                <div class="stat-value" id="analytics-active-subs">-</div>
+                <div class="stat-label">Active Subscriptions</div>
+              </div>
+            </div>
+            <div class="stat-card card">
+              <div class="stat-icon"><i class="fas fa-money-check" style="color:#ffc107;"></i></div>
+              <div class="stat-data">
+                <div class="stat-value" id="analytics-verified">-</div>
+                <div class="stat-label">Verified Payments</div>
+              </div>
+            </div>
+          </div>
+          <div class="card mt-4">
+            <div class="card-header"><h3>Plan Distribution</h3></div>
+            <div class="card-body" id="plan-distribution">
+              Loading...
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    function showSection(section) {
+      document.querySelectorAll('[id^="section-"]').forEach(el => el.style.display = 'none');
+      document.getElementById('section-' + section).style.display = 'block';
+      
+      document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+      document.getElementById('nav-' + section).classList.add('active');
+      
+      document.getElementById('page-title').textContent = section.charAt(0).toUpperCase() + section.slice(1);
+      
+      if (section === 'dashboard') loadDashboard();
+      if (section === 'restaurants') loadRestaurants();
+      if (section === 'payments') loadPayments();
+      if (section === 'subscriptions') loadSubscriptions();
+      if (section === 'orders') loadOrders();
+      if (section === 'analytics') loadAnalytics();
+    }
+
+    async function loadDashboard() {
+      try {
+        const res = await fetch('/admin-panel/api/analytics');
+        const data = await res.json();
+        const s = data.stats;
+        
+        document.getElementById('stat-restaurants').textContent = s.totalRestaurants;
+        document.getElementById('stat-whatsapp').textContent = s.whatsappConnected;
+        document.getElementById('stat-revenue').textContent = 'Rs. ' + s.totalRevenue.toLocaleString();
+        document.getElementById('stat-pending').textContent = s.pendingPayments;
+      } catch (e) {}
+      
+      try {
+        const res = await fetch('/admin-panel/api/payments');
+        const data = await res.json();
+        const list = document.getElementById('recent-payments');
+        const payments = (data.payments || []).slice(0, 5);
+        
+        if (payments.length === 0) {
+          list.innerHTML = '<tr><td colspan="6" class="text-center py-3">No payments yet</td></tr>';
+          return;
+        }
+        
+        list.innerHTML = payments.map(p => `
+          <tr>
+            <td>${p.restaurant_name || 'N/A'}</td>
+            <td>${p.plan_id || '-'}</td>
+            <td>Rs. ${p.amount}</td>
+            <td>${p.payment_method}</td>
+            <td><span class="badge bg-${p.status === 'paid' ? 'success' : p.status === 'rejected' ? 'danger' : 'warning'}">${p.status}</span></td>
+            <td>
+              ${p.status === 'pending' || p.status === 'verification_pending' ? `
+                <button onclick="verifyPayment('${p.id}')" class="btn btn-sm btn-verify"><i class="fas fa-check"></i></button>
+                <button onclick="rejectPayment('${p.id}')" class="btn btn-sm btn-reject"><i class="fas fa-times"></i></button>
+              ` : '-'}
+            </td>
+          </tr>
+        `).join('');
+      } catch (e) {}
+    }
+
+    async function loadRestaurants() {
+      try {
+        const res = await fetch('/admin-panel/api/restaurants');
+        const data = await res.json();
+        document.getElementById('restaurants-count').textContent = data.total;
+        
+        const list = document.getElementById('restaurants-list');
+        if (!data.restaurants || data.restaurants.length === 0) {
+          list.innerHTML = '<tr><td colspan="8" class="text-center py-3">No restaurants yet</td></tr>';
+          return;
+        }
+        
+        list.innerHTML = data.restaurants.map(r => `
+          <tr>
+            <td><strong>${r.name}</strong><br><small>${r.owner_name || ''}</small></td>
+            <td>${r.phone}</td>
+            <td>${r.whatsapp_connected ? '✅ ' + (r.whatsapp_phone || '') : '❌'}</td>
+            <td>${r.subscription_plan ? '<span class="badge bg-info">' + r.subscription_plan + '</span>' : '<span class="badge bg-secondary">None</span>'}</td>
+            <td>${r.total_orders}</td>
+            <td>Rs. ${r.total_revenue.toLocaleString()}</td>
+            <td>${r.is_active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-danger">Inactive</span>'}</td>
+            <td>
+              <button onclick="toggleRestaurant('${r.id}')" class="btn btn-sm btn-${r.is_active ? 'warning' : 'success'}">
+                <i class="fas fa-${r.is_active ? 'pause' : 'play'}"></i>
+              </button>
+              <button onclick="deleteRestaurant('${r.id}', '${r.name}')" class="btn btn-sm btn-reject">
+                <i class="fas fa-trash"></i>
+              </button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (e) {}
+    }
+
+    async function loadPayments() {
+      try {
+        const res = await fetch('/admin-panel/api/payments');
+        const data = await res.json();
+        document.getElementById('payments-count').textContent = data.total;
+        
+        const list = document.getElementById('payments-list');
+        if (!data.payments || data.payments.length === 0) {
+          list.innerHTML = '<tr><td colspan="7" class="text-center py-3">No payments yet</td></tr>';
+          return;
+        }
+        
+        list.innerHTML = data.payments.map(p => `
+          <tr>
+            <td>${p.restaurant_name || 'N/A'}<br><small>${p.restaurant_phone || ''}</small></td>
+            <td>${p.plan_id}</td>
+            <td>Rs. ${p.amount}</td>
+            <td>${p.payment_method}</td>
+            <td><span class="badge bg-${p.status === 'paid' ? 'success' : p.status === 'rejected' ? 'danger' : 'warning'}">${p.status}</span></td>
+            <td><small>${new Date(p.created_at).toLocaleDateString()}</small></td>
+            <td>
+              ${p.status === 'pending' || p.status === 'verification_pending' ? `
+                <button onclick="verifyPayment('${p.id}')" class="btn btn-sm btn-verify"><i class="fas fa-check"></i> Verify</button>
+                <button onclick="rejectPayment('${p.id}')" class="btn btn-sm btn-reject"><i class="fas fa-times"></i></button>
+              ` : '-'}
+            </td>
+          </tr>
+        `).join('');
+      } catch (e) {}
+    }
+
+    async function loadSubscriptions() {
+      try {
+        const res = await fetch('/admin-panel/api/subscriptions');
+        const data = await res.json();
+        
+        const list = document.getElementById('subscriptions-list');
+        if (!data.subscriptions || data.subscriptions.length === 0) {
+          list.innerHTML = '<tr><td colspan="6" class="text-center py-3">No subscriptions yet</td></tr>';
+          return;
+        }
+        
+        list.innerHTML = data.subscriptions.map(s => `
+          <tr>
+            <td>${s.restaurant_name || 'N/A'}</td>
+            <td>${s.plan_id}</td>
+            <td><span class="badge bg-${s.status === 'active' ? 'success' : 'danger'}">${s.status}</span></td>
+            <td>${s.trial ? 'Yes (3 days)' : 'No'}</td>
+            <td>${s.valid_until ? new Date(s.valid_until).toLocaleDateString() : '-'}</td>
+            <td><small>${new Date(s.created_at).toLocaleDateString()}</small></td>
+          </tr>
+        `).join('');
+      } catch (e) {}
+    }
+
+    async function loadOrders() {
+      try {
+        const res = await fetch('/admin-panel/api/orders');
+        const data = await res.json();
+        
+        const list = document.getElementById('orders-list');
+        if (!data.orders || data.orders.length === 0) {
+          list.innerHTML = '<tr><td colspan="6" class="text-center py-3">No orders yet</td></tr>';
+          return;
+        }
+        
+        list.innerHTML = data.orders.map(o => `
+          <tr>
+            <td>${o.restaurant_name || 'N/A'}</td>
+            <td>${o.customer_name || 'N/A'}</td>
+            <td>${o.customer_phone}</td>
+            <td>Rs. ${o.total}</td>
+            <td><span class="badge bg-${o.status === 'delivered' ? 'success' : o.status === 'cancelled' ? 'danger' : 'info'}">${o.status}</span></td>
+            <td><small>${new Date(o.created_at).toLocaleDateString()}</small></td>
+          </tr>
+        `).join('');
+      } catch (e) {}
+    }
+
+    async function loadAnalytics() {
+      try {
+        const res = await fetch('/admin-panel/api/analytics');
+        const data = await res.json();
+        const s = data.stats;
+        
+        document.getElementById('analytics-customers').textContent = s.totalCustomers;
+        document.getElementById('analytics-orders').textContent = s.totalOrders;
+        document.getElementById('analytics-active-subs').textContent = s.activeSubscriptions;
+        document.getElementById('analytics-verified').textContent = s.verifiedPayments;
+        
+        const planDiv = document.getElementById('plan-distribution');
+        if (data.planDistribution && data.planDistribution.length > 0) {
+          planDiv.innerHTML = data.planDistribution.map(p => `
+            <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+              <span class="badge bg-info">${p.subscription_plan}</span>
+              <strong>${p.count} restaurants</strong>
+            </div>
+          `).join('');
+        } else {
+          planDiv.innerHTML = '<p class="text-muted">No active subscriptions yet</p>';
+        }
+      } catch (e) {}
+    }
+
+    async function verifyPayment(id) {
+      if (!confirm('Verify this payment? Plan will be activated.')) return;
+      try {
+        const res = await fetch(`/admin-panel/api/payments/${id}/verify`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          alert(data.message);
+          loadPayments();
+          loadDashboard();
+        } else {
+          alert(data.error);
+        }
+      } catch (e) { alert('Error'); }
+    }
+
+    async function rejectPayment(id) {
+      const reason = prompt('Rejection reason:');
+      if (!reason) return;
+      try {
+        const res = await fetch(`/admin-panel/api/payments/${id}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('Payment rejected');
+          loadPayments();
+        }
+      } catch (e) { alert('Error'); }
+    }
+
+    async function toggleRestaurant(id) {
+      try {
+        const res = await fetch(`/admin-panel/api/restaurants/${id}/toggle`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) loadRestaurants();
+      } catch (e) {}
+    }
+
+    async function deleteRestaurant(id, name) {
+      if (!confirm(`Delete "${name}"? This will remove ALL their data!`)) return;
+      if (!confirm('Are you absolutely sure? This cannot be undone!')) return;
+      try {
+        const res = await fetch(`/admin-panel/api/restaurants/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) loadRestaurants();
+      } catch (e) {}
+    }
+
+    async function logout() {
+      await fetch('/admin-panel/logout', { method: 'POST' });
+    }
+
+    // Load dashboard on page load
+    loadDashboard();
+  </script>
+</body>
+</html>

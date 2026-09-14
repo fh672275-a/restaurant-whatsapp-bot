@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - Secure Access</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0a0a0a;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', -apple-system, sans-serif;
+    }
+    .admin-card {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 15px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      max-width: 450px;
+      width: 100%;
+      padding: 40px;
+      position: relative;
+      overflow: hidden;
+    }
+    .admin-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #ff0000, #ff6600);
+    }
+    .lock-icon {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .lock-icon i {
+      font-size: 50px;
+      color: #ff6600;
+    }
+    h1 {
+      text-align: center;
+      color: #fff;
+      font-size: 24px;
+      margin-bottom: 5px;
+    }
+    .subtitle {
+      text-align: center;
+      color: #666;
+      font-size: 13px;
+      margin-bottom: 30px;
+    }
+    .form-group { margin-bottom: 20px; }
+    .form-group label {
+      color: #aaa;
+      font-size: 13px;
+      font-weight: 600;
+      display: block;
+      margin-bottom: 8px;
+    }
+    .form-control {
+      background: #0a0a0a;
+      border: 2px solid #333;
+      border-radius: 8px;
+      padding: 14px;
+      color: #fff;
+      font-size: 16px;
+      width: 100%;
+      letter-spacing: 2px;
+    }
+    .form-control:focus {
+      outline: none;
+      border-color: #ff6600;
+      box-shadow: 0 0 0 3px rgba(255,102,0,0.1);
+    }
+    .btn-admin {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #ff6600, #ff0000);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-admin:hover { transform: translateY(-1px); box-shadow: 0 5px 20px rgba(255,102,0,0.3); }
+    .alert {
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    .alert-danger {
+      background: rgba(255,0,0,0.1);
+      border: 1px solid #ff0000;
+      color: #ff4444;
+    }
+    .warning {
+      text-align: center;
+      color: #666;
+      font-size: 11px;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #333;
+    }
+    .warning i { color: #ff6600; }
+  </style>
+</head>
+<body>
+  <div class="admin-card">
+    <div class="lock-icon">
+      <i class="fas fa-shield-alt"></i>
+    </div>
+    <h1>Admin Panel</h1>
+    <p class="subtitle">Secure Access Only - Authorized Personnel</p>
+    
+    <div id="alert" class="alert alert-danger"></div>
+    
+    <form onsubmit="loginAdmin(event)">
+      <div class="form-group">
+        <label><i class="fas fa-key"></i> Access Code</label>
+        <input type="password" class="form-control" id="admin-code" placeholder="••••••••••" required autocomplete="off">
+      </div>
+      <button type="submit" class="btn-admin" id="login-btn">
+        <i class="fas fa-lock-open"></i> Access Panel
+      </button>
+    </form>
+    
+    <div class="warning">
+      <i class="fas fa-exclamation-triangle"></i> 
+      Unauthorized access is prohibited and logged.<br>
+      All activities are monitored.
+    </div>
+  </div>
+
+  <script>
+    function showAlert(msg) {
+      const alert = document.getElementById('alert');
+      alert.textContent = msg;
+      alert.style.display = 'block';
+    }
+
+    async function loginAdmin(e) {
+      e.preventDefault();
+      const code = document.getElementById('admin-code').value;
+      const btn = document.getElementById('login-btn');
+      
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+      
+      try {
+        const res = await fetch('/admin-panel/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          window.location.href = data.redirect;
+        } else {
+          showAlert(data.error || 'Access denied');
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-lock-open"></i> Access Panel';
+        }
+      } catch (err) {
+        showAlert('Connection error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-lock-open"></i> Access Panel';
+      }
+    }
+  </script>
+</body>
+</html>
