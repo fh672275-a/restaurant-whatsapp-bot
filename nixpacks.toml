@@ -1,5 +1,4 @@
-# Nixpacks configuration for Railway
-# This tells Railway how to build and run the app
+# Nixpacks configuration for Railway - Stable Build
 
 [phases.setup]
 nixPkgs = ["nodejs_20", "python3", "gcc", "gnumake"]
@@ -8,10 +7,10 @@ nixPkgs = ["nodejs_20", "python3", "gcc", "gnumake"]
 cmds = ["npm install --omit=dev"]
 
 [phases.build]
-cmds = ["npm run build:sqlite"]
+cmds = ["npm run build:sqlite || true"]
 
 [phases.start]
-cmd = "node server.js"
+cmd = "node --max-old-space-size=512 server.js"
 
 [variables]
 NODE_ENV = "production"

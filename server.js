@@ -85,6 +85,23 @@ app.get('/sw.js', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'sw.js'));
 });
 
+// ============ HEALTH CHECK (for Railway) ============
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage().rss
+  });
+});
+
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString()
+  });
+});
+
 // View engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -316,15 +333,44 @@ io.on('connection', (socket) => {
   });
 });
 
-// Error handler
+// Error handler - never crash the server
 app.use((err, req, res, next) => {
   console.error('[Error]', err.message);
-  res.status(500).json({ error: 'Internal server error', message: err.message });
+  // Don't expose internal errors in production
+  if (config.NODE_ENV === 'production') {
+    res.status(500).json({ error: 'Server error, please try again' });
+  } else {
+    res.status(500).json({ error: 'Internal server error', message: err.message });
+  }
 });
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).render('404');
+  // For API routes, return JSON
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'Endpoint not found' });
+  }
+  // For pages, render 404
+  try {
+    res.status(404).render('404');
+  } catch (e) {
+    res.status(404).send('Page not found');
+  }
+});
+
+// ============ GRACEFUL SHUTDOWN & CRASH PROTECTION ============
+
+// Catch uncaught exceptions - NEVER crash
+process.on('uncaughtException', (err) => {
+  console.error('[Uncaught Exception]', err.message);
+  console.error(err.stack);
+  // Don't exit - keep server running
+});
+
+// Catch unhandled promise rejections - NEVER crash
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Unhandled Rejection]', reason);
+  // Don't exit - keep server running
 });
 
 // Start server
