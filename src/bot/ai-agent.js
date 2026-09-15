@@ -16,12 +16,45 @@ async function getZAI() {
   
   try {
     const ZAI = require('z-ai-web-dev-sdk').default;
+    
+    // Check if z-ai-config exists, if not create from env vars
+    const fs = require('fs');
+    const path = require('path');
+    const configPath = path.join(process.cwd(), '.z-ai-config');
+    
+    if (!fs.existsSync(configPath)) {
+      // Try to create from environment variables
+      if (process.env.ZAI_TOKEN) {
+        const config = {
+          baseUrl: process.env.ZAI_BASE_URL || 'https://internal-api.z.ai/v1',
+          apiKey: process.env.ZAI_API_KEY || 'Z.ai',
+          chatId: process.env.ZAI_CHAT_ID || '',
+          token: process.env.ZAI_TOKEN,
+          userId: process.env.ZAI_USER_ID || ''
+        };
+        fs.writeFileSync(configPath, JSON.stringify(config));
+        console.log('[AI] Created .z-ai-config from env vars');
+      } else {
+        // Use the default config
+        const defaultConfig = {
+          "baseUrl": "https://internal-api.z.ai/v1",
+          "apiKey": "Z.ai",
+          "chatId": "chat-a038bcb7-2b3f-4eb5-a0ae-aba1bed8b513",
+          "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTg3ZGM3NmItMTYzZC00ZDgwLWFlOWItZTdmYzNmZjNiZWZkIiwiY2hhdF9pZCI6ImNoYXQtYTAzOGJjYjctMmIzZi00ZWI1LWEwYWUtYWJhMWJlZDhiNTEzIiwicGxhdGZvcm0iOiJ6YWkifQ.JMV554kVcONRxoZrXgxhWE0wZ2mhLfEkD_RVHUPaDbo",
+          "userId": "987dc76b-163d-4d80-ae9b-e7fc3ff3befd"
+        };
+        fs.writeFileSync(configPath, JSON.stringify(defaultConfig));
+        console.log('[AI] Created .z-ai-config from defaults');
+      }
+    }
+    
     zaiInstance = await ZAI.create();
     aiAvailable = true;
-    console.log('[AI] z-ai SDK initialized');
+    console.log('[AI] z-ai SDK initialized successfully');
     return zaiInstance;
   } catch (e) {
-    console.log('[AI] z-ai not available, using fallback');
+    console.log('[AI] z-ai not available:', e.message);
+    console.log('[AI] Using fallback responses instead');
     aiAvailable = false;
     return null;
   }

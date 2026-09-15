@@ -4,10 +4,6 @@ electron-bin
 .git
 .gitignore
 *.md
-DESKTOP_APP.md
-RAILWAY_DEPLOY.md
-FREE_HOSTING.md
-DEPLOYMENT.md
 upload
 skills
 scripts
@@ -15,8 +11,6 @@ logs
 data
 electron/assets/generate-icon.js
 scripts/generate-icons.js
-.z-ai-config
 .env
 .env.local
 .env.production
-README.md

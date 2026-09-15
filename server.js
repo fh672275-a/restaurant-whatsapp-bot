@@ -310,6 +310,14 @@ app.get('/restaurant/marketing', (req, res) => {
   res.render('restaurant-marketing');
 });
 
+// Restaurant - Pricing & Billing
+app.get('/restaurant/pricing', (req, res) => {
+  if (!req.session.user || req.session.user.type !== 'restaurant') {
+    return res.redirect('/login');
+  }
+  res.render('restaurant-pricing');
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/restaurants', restaurantRoutes);
