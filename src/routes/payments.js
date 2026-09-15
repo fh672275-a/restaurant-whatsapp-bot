@@ -212,6 +212,66 @@ router.get('/history', requireAuth, (req, res) => {
   res.json({ payments });
 });
 
+// ============ GET SUBSCRIPTION STATUS WITH COUNTDOWN ============
+router.get('/subscription', requireAuth, (req, res) => {
+  const { checkSubscription } = require('../middleware/subscription');
+  const subCheck = checkSubscription(req.session.user.id);
+  
+  if (subCheck.subscription) {
+    const plan = PRICING_PLANS[subCheck.subscription.plan_id];
+    res.json({ 
+      subscription: subCheck.subscription,
+      plan: plan ? { name: plan.name, price: plan.price } : null,
+      countdown: subCheck.countdown,
+      hasAccess: subCheck.hasAccess,
+      isTrial: subCheck.isTrial,
+      message: subCheck.message
+    });
+  } else {
+    res.json({ 
+      subscription: null,
+      hasAccess: false,
+      message: subCheck.message
+    });
+  }
+});
+
+// ============ RENEW SUBSCRIPTION (after payment) ============
+router.post('/renew', requireAuth, (req, res) => {
+  try {
+    const { planId } = req.body;
+    const plan = PRICING_PLANS[planId];
+    if (!plan) return res.status(400).json({ error: 'Invalid plan' });
+    
+    const restaurantId = req.session.user.id;
+    
+    // Deactivate old subscriptions
+    db.prepare('UPDATE subscriptions SET status = ? WHERE restaurant_id = ? AND status = ?')
+      .run('cancelled', restaurantId, 'active');
+    
+    // Create new subscription (30 days)
+    const subId = generateId('sub_');
+    const validUntil = new Date();
+    validUntil.setMonth(validUntil.getMonth() + 1);
+    
+    db.prepare(`INSERT INTO subscriptions 
+      (id, restaurant_id, plan_id, status, trial, valid_from, valid_until)
+      VALUES (?, ?, ?, 'active', 0, CURRENT_TIMESTAMP, ?)`)
+      .run(subId, restaurantId, planId, validUntil.toISOString());
+    
+    db.prepare('UPDATE restaurants SET subscription_plan = ? WHERE id = ?')
+      .run(planId, restaurantId);
+    
+    res.json({ 
+      success: true, 
+      message: 'Plan renew ho gaya! System dobara active hai.',
+      validUntil: validUntil.toISOString()
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ============ GET CURRENT SUBSCRIPTION ============
 router.get('/subscription', requireAuth, (req, res) => {
   const sub = db.prepare(`

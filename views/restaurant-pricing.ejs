@@ -3,11 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pricing Plans - Restaurant Bot</title>
+  <title>Plans & Billing - Restaurant Bot</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link href="/css/dashboard.css" rel="stylesheet">
   <style>
+    .countdown-bar {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: linear-gradient(90deg, #ff6600, #ff0000);
+      color: white;
+      padding: 12px 20px;
+      text-align: center;
+      font-weight: 600;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+    .countdown-bar.expired {
+      background: #dc3545;
+    }
+    .countdown-timer {
+      font-family: 'Courier New', monospace;
+      font-size: 18px;
+      letter-spacing: 2px;
+    }
     .plan-card {
       background: white;
       border-radius: 15px;
@@ -39,6 +58,22 @@
       font-size: 12px;
       font-weight: 600;
     }
+    .plan-card.enterprise {
+      border-color: #ff6600;
+    }
+    .plan-card.enterprise::before {
+      content: '💎 ALL FEATURES';
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #ff6600;
+      color: white;
+      padding: 4px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
     .plan-price {
       font-size: 36px;
       font-weight: 700;
@@ -64,11 +99,13 @@
       list-style: none;
       padding: 0;
       margin: 20px 0;
+      max-height: 400px;
+      overflow-y: auto;
     }
     .feature-list li {
-      padding: 6px 0;
+      padding: 5px 0;
       color: #555;
-      font-size: 14px;
+      font-size: 13px;
     }
     .feature-list li i {
       color: #25D366;
@@ -76,10 +113,18 @@
     }
     .feature-list li.disabled {
       color: #ccc;
-      text-decoration: line-through;
     }
     .feature-list li.disabled i {
       color: #ccc;
+    }
+    .feature-list li.enterprise-only {
+      background: #fff3e0;
+      padding: 5px 8px;
+      border-radius: 5px;
+      margin: 2px 0;
+    }
+    .feature-list li.enterprise-only i {
+      color: #ff6600;
     }
     .btn-plan {
       width: 100%;
@@ -90,10 +135,11 @@
       border: none;
       transition: all 0.2s;
     }
-    .btn-plan:hover { transform: translateY(-1px); }
     .btn-trial { background: #25D366; color: white; }
     .btn-buy { background: #075E54; color: white; }
     .btn-buy:hover { background: #128C7E; color: white; }
+    .btn-enterprise { background: #ff6600; color: white; }
+    .btn-enterprise:hover { background: #e55b00; color: white; }
     .payment-info {
       background: #f0fff4;
       border: 2px solid #25D366;
@@ -101,9 +147,30 @@
       padding: 20px;
       margin-top: 30px;
     }
+    .expired-banner {
+      background: #dc3545;
+      color: white;
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .expired-banner h3 { margin-bottom: 10px; }
   </style>
 </head>
 <body>
+  <!-- Countdown Bar (shows when subscription active) -->
+  <div id="countdown-bar" class="countdown-bar" style="display:none;">
+    <span id="countdown-text"></span>
+  </div>
+
+  <!-- Expired Banner -->
+  <div id="expired-banner" class="expired-banner" style="display:none;">
+    <h3><i class="fas fa-exclamation-triangle"></i> Plan Expired!</h3>
+    <p>Aap ka plan expire ho gaya hai. System locked hai.</p>
+    <p>Renew karein taake dobara use kar sakein.</p>
+  </div>
+
   <div class="layout">
     <aside class="sidebar">
       <div class="sidebar-header">
@@ -127,17 +194,14 @@
 
     <main class="main-content">
       <header class="top-bar">
-        <h1><i class="fas fa-credit-card"></i> Plans & Pricing</h1>
+        <h1><i class="fas fa-credit-card"></i> Plans & Billing</h1>
       </header>
 
       <div class="content-body">
-        <!-- Current Subscription -->
-        <div id="current-sub" class="alert" style="display:none;"></div>
-
         <!-- Free Trial Banner -->
         <div class="payment-info text-center mb-4">
           <h4><i class="fas fa-gift text-success"></i> 3 Din Ka Free Trial! 🎉</h4>
-          <p class="mb-0">Koi bhi plan select karein, 3 din bilkul FREE use karein. Bina payment ke!</p>
+          <p class="mb-0">Koi bhi plan select karein, 3 din bilkul FREE use karein!</p>
         </div>
 
         <!-- Plans Grid -->
@@ -162,7 +226,7 @@
             </div>
           </div>
           <hr>
-          <p class="mb-0"><i class="fas fa-info-circle text-info"></i> <strong>Process:</strong> Payment karein → Screenshot upload karein → Admin verify karega → Plan activate!</p>
+          <p class="mb-0"><i class="fas fa-info-circle text-info"></i> <strong>Process:</strong> Payment karein → Screenshot upload → Admin verify → Plan activate!</p>
         </div>
       </div>
     </main>
@@ -176,9 +240,7 @@
           <h5 class="modal-title">Payment Details</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body" id="payment-modal-body">
-          Loading...
-        </div>
+        <div class="modal-body" id="payment-modal-body">Loading...</div>
       </div>
     </div>
   </div>
@@ -188,72 +250,133 @@
     let selectedPlan = null;
     const paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
 
+    // Check URL for expired param
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('expired') === 'true') {
+      document.getElementById('expired-banner').style.display = 'block';
+    }
+
+    async function loadSubscription() {
+      try {
+        const res = await fetch('/api/payments/subscription');
+        const data = await res.json();
+        
+        if (data.subscription && data.hasAccess) {
+          // Show countdown
+          const cd = data.countdown;
+          const bar = document.getElementById('countdown-bar');
+          const text = document.getElementById('countdown-text');
+          
+          if (data.isTrial) {
+            bar.style.background = 'linear-gradient(90deg, #ff6600, #ffc107)';
+            text.innerHTML = `<i class="fas fa-gift"></i> FREE TRIAL chal raha hai | Baqi: <span class="countdown-timer" id="timer">${cd.days}d ${cd.hours}h ${cd.minutes}m ${cd.seconds}s</span>`;
+          } else {
+            bar.style.background = 'linear-gradient(90deg, #25D366, #128C7E)';
+            text.innerHTML = `<i class="fas fa-check-circle"></i> Plan Active: ${data.plan.name} | Baqi: <span class="countdown-timer" id="timer">${cd.days}d ${cd.hours}h ${cd.minutes}m ${cd.seconds}s</span>`;
+          }
+          bar.style.display = 'block';
+          
+          // Start countdown timer
+          startCountdown(cd);
+        } else if (data.subscription && !data.hasAccess) {
+          // Expired
+          document.getElementById('expired-banner').style.display = 'block';
+        }
+      } catch (e) {}
+    }
+
+    function startCountdown(cd) {
+      let totalSeconds = cd.days * 86400 + cd.hours * 3600 + cd.minutes * 60 + cd.seconds;
+      
+      const interval = setInterval(() => {
+        totalSeconds--;
+        
+        if (totalSeconds <= 0) {
+          clearInterval(interval);
+          document.getElementById('countdown-bar').className = 'countdown-bar expired';
+          document.getElementById('countdown-text').innerHTML = '<i class="fas fa-exclamation-triangle"></i> PLAN EXPIRED! Renew karein.';
+          setTimeout(() => location.reload(), 2000);
+          return;
+        }
+        
+        const d = Math.floor(totalSeconds / 86400);
+        const h = Math.floor((totalSeconds % 86400) / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
+        const s = totalSeconds % 60;
+        
+        const timer = document.getElementById('timer');
+        if (timer) {
+          timer.textContent = `${d}d ${h}h ${m}m ${s}s`;
+        }
+      }, 1000);
+    }
+
     async function loadPlans() {
       try {
         const res = await fetch('/api/payments/plans');
         const data = await res.json();
         
-        // Load restaurant name
         const restRes = await fetch('/api/auth/me');
         const restData = await restRes.json();
         if (restData.user) {
           document.getElementById('rest-name').textContent = restData.user.name;
         }
         
-        // Load current subscription
-        try {
-          const subRes = await fetch('/api/payments/subscription');
-          const subData = await subRes.json();
-          if (subData.subscription) {
-            const sub = subData.subscription;
-            const validUntil = new Date(sub.valid_until).toLocaleDateString();
-            const subDiv = document.getElementById('current-sub');
-            subDiv.className = 'alert alert-success';
-            subDiv.innerHTML = `<i class="fas fa-check-circle"></i> <strong>Active Plan:</strong> ${sub.plan_id} | Valid until: ${validUntil} | ${sub.trial ? '(Free Trial)' : '(Paid)'}`;
-            subDiv.style.display = 'block';
-          }
-        } catch (e) {}
-        
         const plans = data.plans || [];
         const container = document.getElementById('plans-container');
         
-        if (plans.length === 0) {
-          container.innerHTML = '<div class="col-12 text-center py-4 text-muted">No plans available</div>';
-          return;
-        }
-        
-        container.innerHTML = plans.map(plan => `
+        container.innerHTML = plans.map(plan => {
+          const isEnterprise = plan.id === 'enterprise';
+          const f = plan.features;
+          
+          return `
           <div class="col-md-6 col-lg-3 mb-4">
-            <div class="plan-card ${plan.popular ? 'popular' : ''}">
+            <div class="plan-card ${plan.popular ? 'popular' : ''} ${isEnterprise ? 'enterprise' : ''}">
               <h4 class="text-center">${plan.name}</h4>
               <div class="text-center">
                 <span class="trial-badge"><i class="fas fa-gift"></i> 3 Days Free Trial</span>
               </div>
-              <div class="plan-price text-center">
-                Rs. ${plan.price.toLocaleString()}
-                <small>/month</small>
-              </div>
+              <div class="plan-price text-center">Rs. ${plan.price.toLocaleString()}<small>/month</small></div>
               <ul class="feature-list">
-                ${plan.features.maxRestaurants === -1 ? '<li><i class="fas fa-check"></i> Unlimited restaurants</li>' : `<li><i class="fas fa-check"></i> ${plan.features.maxRestaurants} restaurant${plan.features.maxRestaurants > 1 ? 's' : ''}</li>`}
-                ${plan.features.maxMenuItems === -1 ? '<li><i class="fas fa-check"></i> Unlimited menu items</li>' : '<li><i class="fas fa-check"></i> Unlimited menu items</li>'}
-                ${plan.features.whatsappBot ? '<li><i class="fas fa-check"></i> WhatsApp bot (24/7)</li>' : '<li class="disabled"><i class="fas fa-times"></i> WhatsApp bot</li>'}
-                ${plan.features.bulkMenuUpload ? '<li><i class="fas fa-check"></i> Bulk menu upload</li>' : '<li class="disabled"><i class="fas fa-times"></i> Bulk upload</li>'}
-                ${plan.features.aiMarketing ? '<li><i class="fas fa-check"></i> AI marketing</li>' : '<li class="disabled"><i class="fas fa-times"></i> AI marketing</li>'}
-                ${plan.features.reservations ? '<li><i class="fas fa-check"></i> Reservations</li>' : '<li class="disabled"><i class="fas fa-times"></i> Reservations</li>'}
-                ${plan.features.feedback ? '<li><i class="fas fa-check"></i> Feedback system</li>' : '<li class="disabled"><i class="fas fa-times"></i> Feedback</li>'}
-                ${plan.features.broadcastMessages ? '<li><i class="fas fa-check"></i> Broadcast messages</li>' : '<li class="disabled"><i class="fas fa-times"></i> Broadcasts</li>'}
-                ${plan.features.multiBranch ? '<li><i class="fas fa-check"></i> Multi-branch support</li>' : '<li class="disabled"><i class="fas fa-times"></i> Multi-branch</li>'}
-                ${plan.features.prioritySupport ? '<li><i class="fas fa-check"></i> Priority support</li>' : ''}
+                ${f.maxRestaurants === -1 ? '<li><i class="fas fa-check"></i> Unlimited restaurants</li>' : `<li><i class="fas fa-check"></i> ${f.maxRestaurants} restaurant${f.maxRestaurants > 1 ? 's' : ''}</li>`}
+                <li><i class="fas fa-check"></i> Unlimited menu items</li>
+                ${f.whatsappBot ? '<li><i class="fas fa-check"></i> WhatsApp bot (24/7)</li>' : '<li class="disabled"><i class="fas fa-times"></i> WhatsApp bot</li>'}
+                ${f.bulkMenuUpload ? '<li><i class="fas fa-check"></i> Bulk menu upload</li>' : '<li class="disabled"><i class="fas fa-times"></i> Bulk upload</li>'}
+                ${f.aiMarketing ? '<li><i class="fas fa-check"></i> AI marketing + Image ads</li>' : '<li class="disabled"><i class="fas fa-times"></i> AI marketing</li>'}
+                ${f.reservations ? '<li><i class="fas fa-check"></i> Reservations</li>' : '<li class="disabled"><i class="fas fa-times"></i> Reservations</li>'}
+                ${f.feedback ? '<li><i class="fas fa-check"></i> Feedback system</li>' : '<li class="disabled"><i class="fas fa-times"></i> Feedback</li>'}
+                ${f.broadcastMessages ? '<li><i class="fas fa-check"></i> Broadcast messages</li>' : '<li class="disabled"><i class="fas fa-times"></i> Broadcasts</li>'}
+                ${f.multiBranch ? '<li><i class="fas fa-check"></i> Multi-branch</li>' : '<li class="disabled"><i class="fas fa-times"></i> Multi-branch</li>'}
+                ${f.prioritySupport ? '<li><i class="fas fa-check"></i> Priority support</li>' : '<li class="disabled"><i class="fas fa-times"></i> Priority support</li>'}
+                ${f.customBranding ? '<li><i class="fas fa-check"></i> Custom branding</li>' : '<li class="disabled"><i class="fas fa-times"></i> Custom branding</li>'}
+                ${f.apiAccess ? '<li><i class="fas fa-check"></i> API access</li>' : '<li class="disabled"><i class="fas fa-times"></i> API access</li>'}
+                <!-- Enterprise EXCLUSIVE features -->
+                ${f.loyaltyProgram ? '<li class="enterprise-only"><i class="fas fa-crown"></i> Loyalty program</li>' : '<li class="disabled"><i class="fas fa-times"></i> Loyalty program</li>'}
+                ${f.qrTableOrdering ? '<li class="enterprise-only"><i class="fas fa-qrcode"></i> QR table ordering</li>' : '<li class="disabled"><i class="fas fa-times"></i> QR table ordering</li>'}
+                ${f.inventoryManagement ? '<li class="enterprise-only"><i class="fas fa-boxes"></i> Inventory management</li>' : '<li class="disabled"><i class="fas fa-times"></i> Inventory mgmt</li>'}
+                ${f.staffManagement ? '<li class="enterprise-only"><i class="fas fa-users-cog"></i> Staff management</li>' : '<li class="disabled"><i class="fas fa-times"></i> Staff management</li>'}
+                ${f.posIntegration ? '<li class="enterprise-only"><i class="fas fa-cash-register"></i> POS integration</li>' : '<li class="disabled"><i class="fas fa-times"></i> POS integration</li>'}
+                ${f.taxInvoicing ? '<li class="enterprise-only"><i class="fas fa-file-invoice"></i> Tax invoicing (FBR)</li>' : '<li class="disabled"><i class="fas fa-times"></i> Tax invoicing</li>'}
+                ${f.smsNotifications ? '<li class="enterprise-only"><i class="fas fa-sms"></i> SMS notifications</li>' : '<li class="disabled"><i class="fas fa-times"></i> SMS notifications</li>'}
+                ${f.whiteLabel ? '<li class="enterprise-only"><i class="fas fa-tag"></i> White-label solution</li>' : '<li class="disabled"><i class="fas fa-times"></i> White-label</li>'}
+                ${f.dedicatedServer ? '<li class="enterprise-only"><i class="fas fa-server"></i> Dedicated server</li>' : '<li class="disabled"><i class="fas fa-times"></i> Dedicated server</li>'}
+                ${f.sla ? '<li class="enterprise-only"><i class="fas fa-shield-alt"></i> SLA guarantee</li>' : '<li class="disabled"><i class="fas fa-times"></i> SLA</li>'}
+                ${f.training ? '<li class="enterprise-only"><i class="fas fa-graduation-cap"></i> Training sessions</li>' : '<li class="disabled"><i class="fas fa-times"></i> Training</li>'}
+                ${f.kitchenDisplay ? '<li class="enterprise-only"><i class="fas fa-tv"></i> Kitchen display system</li>' : ''}
+                ${f.deliveryBoyApp ? '<li class="enterprise-only"><i class="fas fa-motorcycle"></i> Delivery boy app</li>' : ''}
+                ${f.recipeManagement ? '<li class="enterprise-only"><i class="fas fa-book"></i> Recipe management</li>' : ''}
+                ${f.expenseTracking ? '<li class="enterprise-only"><i class="fas fa-money-check"></i> Expense tracking</li>' : ''}
+                ${f.payrollManagement ? '<li class="enterprise-only"><i class="fas fa-wallet"></i> Payroll management</li>' : ''}
               </ul>
               <button onclick="startTrial('${plan.id}')" class="btn-plan btn-trial mb-2">
                 <i class="fas fa-gift"></i> Start 3-Day Free Trial
               </button>
-              <button onclick="buyPlan('${plan.id}')" class="btn-plan btn-buy">
-                <i class="fas fa-shopping-cart"></i> Buy Now (Rs. ${plan.price.toLocaleString()})
+              <button onclick="buyPlan('${plan.id}')" class="btn-plan ${isEnterprise ? 'btn-enterprise' : 'btn-buy'}">
+                <i class="fas fa-shopping-cart"></i> Buy Now
               </button>
             </div>
-          </div>
-        `).join('');
+          </div>`;
+        }).join('');
       } catch (e) {
         document.getElementById('plans-container').innerHTML = '<div class="col-12 text-center text-danger">Error loading plans</div>';
       }
@@ -274,33 +397,17 @@
         } else {
           alert(data.error);
         }
-      } catch (e) {
-        alert('Error starting trial');
-      }
+      } catch (e) { alert('Error'); }
     }
 
     async function buyPlan(planId) {
       selectedPlan = planId;
-      
-      const methods = `
-        <div class="text-center mb-3">
-          <h5>Payment Method Select Karein</h5>
-        </div>
+      document.getElementById('payment-modal-body').innerHTML = `
+        <div class="text-center mb-3"><h5>Payment Method Select Karein</h5></div>
         <div class="row">
-          <div class="col-6">
-            <button onclick="createPayment('easypaisa')" class="btn btn-success w-100 py-3">
-              <i class="fas fa-wallet"></i><br>EasyPaisa
-            </button>
-          </div>
-          <div class="col-6">
-            <button onclick="createPayment('jazzcash')" class="btn btn-primary w-100 py-3">
-              <i class="fas fa-mobile-alt"></i><br>JazzCash
-            </button>
-          </div>
-        </div>
-      `;
-      
-      document.getElementById('payment-modal-body').innerHTML = methods;
+          <div class="col-6"><button onclick="createPayment('easypaisa')" class="btn btn-success w-100 py-3"><i class="fas fa-wallet"></i><br>EasyPaisa</button></div>
+          <div class="col-6"><button onclick="createPayment('jazzcash')" class="btn btn-primary w-100 py-3"><i class="fas fa-mobile-alt"></i><br>JazzCash</button></div>
+        </div>`;
       paymentModal.show();
     }
 
@@ -312,9 +419,8 @@
           body: JSON.stringify({ planId: selectedPlan, paymentMethod: method })
         });
         const data = await res.json();
-        
         if (data.success) {
-          const body = `
+          document.getElementById('payment-modal-body').innerHTML = `
             <div class="text-center">
               <h5 class="text-success"><i class="fas fa-check-circle"></i> Payment Request Created!</h5>
               <hr>
@@ -340,52 +446,29 @@
                 <label class="form-label"><strong>Screenshot Upload Karein:</strong></label>
                 <input type="file" id="screenshot-file" class="form-control" accept="image/*">
               </div>
-              <button onclick="uploadScreenshot()" class="btn btn-success w-100 mt-3">
-                <i class="fas fa-upload"></i> Screenshot Upload Karein
-              </button>
-              <p class="text-muted small mt-2">Admin verify karne k baad plan activate ho jayega (24 hours)</p>
-            </div>
-          `;
-          document.getElementById('payment-modal-body').innerHTML = body;
-        } else {
-          alert(data.error);
-        }
-      } catch (e) {
-        alert('Error creating payment');
-      }
+              <button onclick="uploadScreenshot()" class="btn btn-success w-100 mt-3"><i class="fas fa-upload"></i> Upload Screenshot</button>
+              <p class="text-muted small mt-2">Admin verify karne k baad plan activate (24 hours)</p>
+            </div>`;
+        } else { alert(data.error); }
+      } catch (e) { alert('Error'); }
     }
 
     async function uploadScreenshot() {
       const fileInput = document.getElementById('screenshot-file');
-      if (!fileInput.files.length) {
-        alert('Pehle screenshot select karein');
-        return;
-      }
-      
-      const paymentId = document.getElementById('payment-id').value;
+      if (!fileInput.files.length) { alert('Screenshot select karein'); return; }
       const formData = new FormData();
       formData.append('screenshot', fileInput.files[0]);
-      formData.append('paymentId', paymentId);
-      
+      formData.append('paymentId', document.getElementById('payment-id').value);
       try {
-        const res = await fetch('/api/payments/screenshot', {
-          method: 'POST',
-          body: formData
-        });
+        const res = await fetch('/api/payments/screenshot', { method: 'POST', body: formData });
         const data = await res.json();
-        
-        if (data.success) {
-          alert(data.message);
-          paymentModal.hide();
-          location.reload();
-        } else {
-          alert(data.error);
-        }
-      } catch (e) {
-        alert('Upload failed');
-      }
+        if (data.success) { alert(data.message); paymentModal.hide(); location.reload(); }
+        else { alert(data.error); }
+      } catch (e) { alert('Upload failed'); }
     }
 
+    // Load on page
+    loadSubscription();
     loadPlans();
   </script>
 </body>

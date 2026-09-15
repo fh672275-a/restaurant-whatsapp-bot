@@ -1,8 +1,27 @@
 /**
- * Pricing Plans Configuration - ACTIVATED
+ * Pricing Plans - FINAL Configuration
  * 
- * 4 Plans with 3-day free trial
- * Payment via EasyPaisa/JazzCash: 03494117212 (Muhammad Ashraf)
+ * Starter: Basic features
+ * Pro: Mid-tier (NO Feedback, Broadcast, Multi-branch, Priority support)
+ * Business: Advanced (most features)
+ * Enterprise: EVERYTHING enabled (no exceptions)
+ * 
+ * Exclusive Enterprise features (researched for Pakistan market):
+ * - Loyalty program (repeat customers)
+ * - QR code table ordering
+ * - Inventory management
+ * - Staff management
+ * - POS integration
+ * - Tax invoicing
+ * - SMS notifications
+ * - White-label solution
+ * - Custom branding
+ * - API access
+ * - Multi-branch unlimited
+ * - Dedicated server
+ * - SLA guarantee
+ * - Training sessions
+ * - Priority support 24/7
  */
 
 const PRICING_PLANS = {
@@ -25,9 +44,29 @@ const PRICING_PLANS = {
       analytics: 'basic',
       marketing: false,
       aiMarketing: false,
-      logoUpload: true
+      logoUpload: true,
+      // NOT in Starter:
+      reservations: false,
+      feedback: false,
+      broadcastMessages: false,
+      multiBranch: false,
+      prioritySupport: false,
+      customBranding: false,
+      apiAccess: false,
+      // Enterprise exclusive - NOT here
+      loyaltyProgram: false,
+      qrTableOrdering: false,
+      inventoryManagement: false,
+      staffManagement: false,
+      posIntegration: false,
+      taxInvoicing: false,
+      smsNotifications: false,
+      whiteLabel: false,
+      dedicatedServer: false,
+      sla: false,
+      training: false
     },
-    description: 'Single restaurant - perfect for starting'
+    description: 'Single restaurant starting up'
   },
   
   pro: {
@@ -50,14 +89,29 @@ const PRICING_PLANS = {
       marketing: true,
       aiMarketing: true,
       aiMarketingAdsPerMonth: 50,
-      reservations: true,
-      feedback: true,
-      broadcastMessages: true,
       logoUpload: true,
       deliveryAreas: true,
-      operatingHours: true
+      operatingHours: true,
+      // NOT in Pro (as requested):
+      reservations: false,
+      feedback: false,
+      broadcastMessages: false,
+      multiBranch: false,
+      prioritySupport: false,
+      // Enterprise exclusive - NOT here:
+      loyaltyProgram: false,
+      qrTableOrdering: false,
+      inventoryManagement: false,
+      staffManagement: false,
+      posIntegration: false,
+      taxInvoicing: false,
+      smsNotifications: false,
+      whiteLabel: false,
+      dedicatedServer: false,
+      sla: false,
+      training: false
     },
-    description: 'Most popular - full features'
+    description: 'Most popular - growing restaurants'
   },
   
   business: {
@@ -73,21 +127,36 @@ const PRICING_PLANS = {
       maxRestaurants: 5,
       maxMenuItems: -1,
       maxOrdersPerMonth: -1,
+      maxDeals: -1,
       whatsappBot: true,
       bulkMenuUpload: true,
       analytics: 'advanced',
       marketing: true,
       aiMarketing: true,
       aiMarketingAdsPerMonth: 200,
+      logoUpload: true,
+      customBranding: true,
+      deliveryAreas: true,
+      operatingHours: true,
+      // In Business:
       reservations: true,
       feedback: true,
       broadcastMessages: true,
-      logoUpload: true,
-      customBranding: true,
-      apiAccess: true,
       multiBranch: true,
       maxBranches: 5,
-      prioritySupport: true
+      prioritySupport: true,
+      // Enterprise exclusive - NOT here:
+      loyaltyProgram: false,
+      qrTableOrdering: false,
+      inventoryManagement: false,
+      staffManagement: false,
+      posIntegration: false,
+      taxInvoicing: false,
+      smsNotifications: false,
+      whiteLabel: false,
+      dedicatedServer: false,
+      sla: false,
+      training: false
     },
     description: 'Multi-branch restaurants'
   },
@@ -102,23 +171,59 @@ const PRICING_PLANS = {
     active: true,
     freeTrialDays: 3,
     features: {
+      // ALL features enabled - no exceptions
       maxRestaurants: -1,
+      maxMenuItems: -1,
+      maxOrdersPerMonth: -1,
+      maxDeals: -1,
       whatsappBot: true,
       bulkMenuUpload: true,
       analytics: 'enterprise',
       marketing: true,
       aiMarketing: true,
       aiMarketingAdsPerMonth: -1,
+      logoUpload: true,
+      customBranding: true,
+      deliveryAreas: true,
+      operatingHours: true,
+      reservations: true,
+      feedback: true,
+      broadcastMessages: true,
       multiBranch: true,
       maxBranches: -1,
-      customBranding: true,
-      apiAccess: true,
       prioritySupport: true,
-      dedicatedServer: true,
-      whiteLabel: true,
-      training: true
+      apiAccess: true,
+      // Enterprise EXCLUSIVE features (Pakistan market research):
+      loyaltyProgram: true,           // Repeat customer points/discounts
+      qrTableOrdering: true,           // QR code on tables for direct ordering
+      inventoryManagement: true,      // Track stock, auto-alert when low
+      staffManagement: true,          // Manage staff shifts, roles, permissions
+      posIntegration: true,           // Connect with POS systems
+      taxInvoicing: true,             // Generate tax invoices (FBR compliant)
+      smsNotifications: true,        // SMS alerts for orders
+      whiteLabel: true,               // Your brand, your domain
+      dedicatedServer: true,          // Dedicated server resources
+      sla: true,                      // Service Level Agreement
+      training: true,                 // Staff training sessions
+      customDomain: true,
+      customReports: true,            // Custom analytics reports
+      multiCurrency: true,            // Accept payments in multiple currencies
+      advancedSecurity: true,         // Advanced security features
+      backupRestore: true,            // Automated backups
+      apiWebhooks: true,              // Webhook integrations
+      voiceOrdering: true,            // Voice-based ordering (AI)
+      multiLanguage: true,            // Multi-language support
+      franchiseMode: true,            // Franchise management
+      customerApp: true,              // White-label customer app
+      deliveryBoyApp: true,           // Delivery boy management app
+      tableManagement: true,          // Table reservation management
+      kitchenDisplay: true,           // Kitchen display system
+      recipeManagement: true,         // Recipe/ingredient management
+      supplierManagement: true,       // Supplier tracking
+      expenseTracking: true,          // Expense management
+      payrollManagement: true         // Staff payroll
     },
-    description: 'Large chains with dedicated infrastructure'
+    description: 'Everything unlocked - large chains & franchises'
   }
 };
 

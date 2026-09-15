@@ -24,6 +24,7 @@ function requireRestaurantAccess(req, res, next) {
 
 /**
  * Generate marketing message using AI - WITH FALLBACK
+ * Now also generates IMAGE ads (HTML-based, downloadable)
  */
 router.post('/generate', requireRestaurantAccess, async (req, res) => {
   try {
@@ -33,7 +34,7 @@ router.post('/generate', requireRestaurantAccess, async (req, res) => {
     const menuItems = db.prepare('SELECT name, price FROM menu_items WHERE restaurant_id = ? AND is_available = 1 LIMIT 10').all(req.restaurantId);
     const deals = db.prepare('SELECT name, deal_price, original_price FROM deals WHERE restaurant_id = ? AND is_active = 1').all(req.restaurantId);
     
-    // Try AI first
+    // Generate text variations
     let variations = [];
     
     try {
@@ -41,14 +42,12 @@ router.post('/generate', requireRestaurantAccess, async (req, res) => {
       const zai = await ZAI.create();
       
       const prompt = `Generate a WhatsApp promotional message for "${restaurant.name}".
-
 Restaurant: ${restaurant.name}
 Phone: ${restaurant.phone}
 Items: ${menuItems.map(m => `${m.name} (Rs. ${m.price})`).join(', ') || 'N/A'}
 Deals: ${deals.map(d => `${d.name} - Rs. ${d.deal_price}`).join(', ') || 'N/A'}
 Type: ${type}
 Details: ${customDetails || 'None'}
-
 Write in Roman Urdu, engaging, with emojis, under 200 chars.`;
 
       const completion = await zai.chat.completions.create({
@@ -64,54 +63,103 @@ Write in Roman Urdu, engaging, with emojis, under 200 chars.`;
       const msg = completion.choices[0]?.message?.content?.trim();
       if (msg) variations.push(msg);
       
-      // Generate 2 more variations
       for (let i = 0; i < 2; i++) {
         const completion2 = await zai.chat.completions.create({
           messages: [
-            { role: 'assistant', content: 'Create a DIFFERENT version of the promotional message.' },
+            { role: 'assistant', content: 'Create a DIFFERENT version.' },
             { role: 'user', content: prompt + `\n\nVersion ${i+2}, make it unique.` }
           ],
           thinking: { type: 'disabled' },
           temperature: 0.9,
           max_tokens: 300
         });
-        
         const msg2 = completion2.choices[0]?.message?.content?.trim();
         if (msg2) variations.push(msg2);
       }
     } catch (aiError) {
       console.error('[Marketing] AI error:', aiError.message);
-      // Will use fallback
     }
     
-    // If AI failed or no variations, use fallback
     if (variations.length === 0) {
       variations = generateFallbackAds(restaurant, type, customDetails, menuItems, deals);
     }
+    
+    // Generate IMAGE ads (HTML-based, can be downloaded as PNG)
+    const imageAds = generateImageAds(restaurant, type, customDetails, menuItems, deals, variations);
     
     res.json({
       success: true,
       type,
       variations,
-      message: `${variations.length} ad variations generated!`
+      imageAds,
+      message: `${variations.length} text + ${imageAds.length} image ads generated!`
     });
   } catch (e) {
     console.error('[Marketing] Error:', e.message);
-    // Return fallback even on error
     const restaurant = db.prepare('SELECT * FROM restaurants WHERE id = ?').get(req.restaurantId);
     const menuItems = db.prepare('SELECT name, price FROM menu_items WHERE restaurant_id = ? LIMIT 5').all(req.restaurantId);
     const deals = db.prepare('SELECT name, deal_price FROM deals WHERE restaurant_id = ? AND is_active = 1 LIMIT 3').all(req.restaurantId);
     
     const fallbackVariations = generateFallbackAds(restaurant, req.body.type, req.body.customDetails, menuItems, deals);
+    const imageAds = generateImageAds(restaurant, req.body.type, req.body.customDetails, menuItems, deals, fallbackVariations);
     
     res.json({
       success: true,
       type: req.body.type || 'general',
       variations: fallbackVariations,
+      imageAds,
       message: 'Ads generated (fallback mode)'
     });
   }
 });
+
+/**
+ * Generate image ads (HTML-based, downloadable as PNG)
+ */
+function generateImageAds(restaurant, type, customDetails, menuItems, deals, textVariations) {
+  const name = restaurant.name;
+  const phone = restaurant.phone;
+  const topItems = menuItems.slice(0, 3).map(m => `${m.name} - Rs. ${m.price}`).join(' | ') || 'Delicious Food';
+  
+  const colorSchemes = [
+    { bg: '#075E54', accent: '#25D366', text: '#FFFFFF' },
+    { bg: '#1a1a2e', accent: '#ff6600', text: '#FFFFFF' },
+    { bg: '#fff8e1', accent: '#ff6600', text: '#333333' }
+  ];
+  
+  const typeEmojis = {
+    deal: '🔥', festival: '🌙', new_item: '🆕', discount: '💰',
+    weekend_special: '🌟', anniversary: '🎂', general: '🍽️'
+  };
+  
+  const emoji = typeEmojis[type] || '🍽️';
+  
+  return textVariations.slice(0, 3).map((text, i) => {
+    const colors = colorSchemes[i % colorSchemes.length];
+    const headline = type.replace(/_/g, ' ').toUpperCase();
+    
+    // Create HTML image ad (can be converted to PNG via canvas)
+    const html = `
+<div style="width:400px;background:${colors.bg};border-radius:20px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+  <div style="background:linear-gradient(135deg,${colors.accent},${colors.bg});padding:20px;text-align:center;">
+    <div style="font-size:48px;margin-bottom:10px;">${emoji}</div>
+    <h1 style="color:${colors.text};font-size:24px;margin:0;">${name}</h1>
+    <p style="color:${colors.text};opacity:0.9;font-size:14px;margin:5px 0;">${headline}</p>
+  </div>
+  <div style="padding:20px;">
+    <p style="color:${colors.text};font-size:16px;line-height:1.5;">${text.substring(0, 150)}</p>
+    <div style="margin-top:15px;padding-top:15px;border-top:1px solid ${colors.accent};">
+      <p style="color:${colors.accent};font-weight:bold;font-size:14px;">${topItems}</p>
+    </div>
+    <div style="margin-top:15px;background:${colors.accent};border-radius:10px;padding:12px;text-align:center;">
+      <p style="color:#fff;font-weight:bold;font-size:18px;margin:0;">📞 ${phone}</p>
+    </div>
+  </div>
+</div>`;
+    
+    return { html, text, colors, emoji };
+  });
+}
 
 /**
  * Fallback ad generator - 100% works without AI
