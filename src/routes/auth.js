@@ -215,8 +215,8 @@ router.post('/restaurant/signup', (req, res) => {
     res.json({ 
       success: true, 
       id, 
-      redirect: '/restaurant/onboarding',
-      message: 'Account ban gaya! Ab apna restaurant setup karein.'
+      redirect: '/restaurant/pricing?new=true',
+      message: 'Account ban gaya! Pehle plan select karein ya free trial start karein.'
     });
   } catch (e) {
     res.status(500).json({ error: 'Server error: ' + e.message });

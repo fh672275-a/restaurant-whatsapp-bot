@@ -123,6 +123,14 @@ app.get('/', (req, res) => {
   if (req.session.user.type === 'super_admin') {
     return res.redirect('/admin/dashboard');
   }
+  // Check subscription for restaurant
+  if (req.session.user.type === 'restaurant') {
+    const { checkSubscription } = require('./src/middleware/subscription');
+    const subCheck = checkSubscription(req.session.user.id);
+    if (!subCheck.hasAccess) {
+      return res.redirect('/restaurant/pricing');
+    }
+  }
   return res.redirect('/restaurant/dashboard');
 });
 
@@ -190,123 +198,91 @@ app.get('/admin/restaurants/:id', (req, res) => {
   res.render('admin-restaurant-detail', { restaurantId: req.params.id });
 });
 
-// Restaurant Dashboard
-app.get('/restaurant/dashboard', (req, res) => {
+// ============ SUBSCRIPTION CHECK MIDDLEWARE ============
+function checkSub(req, res, next) {
   if (!req.session.user || req.session.user.type !== 'restaurant') {
     return res.redirect('/login');
   }
+  const { checkSubscription } = require('./src/middleware/subscription');
+  const subCheck = checkSubscription(req.session.user.id);
+  if (!subCheck.hasAccess) {
+    return res.redirect('/restaurant/pricing');
+  }
+  next();
+}
+
+// Restaurant Dashboard
+app.get('/restaurant/dashboard', checkSub, (req, res) => {
   res.render('restaurant-dashboard');
 });
 
 // Restaurant - Menu management
-app.get('/restaurant/menu', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/menu', checkSub, (req, res) => {
   res.render('restaurant-menu');
 });
 
 // Restaurant - Orders
-app.get('/restaurant/orders', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/orders', checkSub, (req, res) => {
   res.render('restaurant-orders');
 });
 
 // Restaurant - WhatsApp Connect (QR Code page)
-app.get('/restaurant/whatsapp', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/whatsapp', checkSub, (req, res) => {
   res.render('restaurant-whatsapp');
 });
 
 // Restaurant - Settings
-app.get('/restaurant/settings', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/settings', checkSub, (req, res) => {
   res.render('restaurant-settings');
 });
 
 // Restaurant - Deals Management
-app.get('/restaurant/deals', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/deals', checkSub, (req, res) => {
   res.render('restaurant-deals');
 });
 
 // Restaurant - Hours Management
-app.get('/restaurant/hours', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/hours', checkSub, (req, res) => {
   res.render('restaurant-hours');
 });
 
 // Restaurant - Delivery Areas
-app.get('/restaurant/delivery', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/delivery', checkSub, (req, res) => {
   res.render('restaurant-delivery');
 });
 
 // Restaurant - Customers
-app.get('/restaurant/customers', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/customers', checkSub, (req, res) => {
   res.render('restaurant-customers');
 });
 
 // Restaurant - Feedback
-app.get('/restaurant/feedback', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/feedback', checkSub, (req, res) => {
   res.render('restaurant-feedback');
 });
 
 // Restaurant - Broadcasts
-app.get('/restaurant/broadcasts', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/broadcasts', checkSub, (req, res) => {
   res.render('restaurant-broadcasts');
 });
 
 // Restaurant - Reservations
-app.get('/restaurant/reservations', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/reservations', checkSub, (req, res) => {
   res.render('restaurant-reservations');
 });
 
 // Restaurant - Analytics
-app.get('/restaurant/analytics', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/analytics', checkSub, (req, res) => {
   res.render('restaurant-analytics');
 });
 
 // Restaurant - Bulk Menu Upload
-app.get('/restaurant/bulk-upload', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/bulk-upload', checkSub, (req, res) => {
   res.render('restaurant-bulk-upload');
 });
 
 // Restaurant - Marketing
-app.get('/restaurant/marketing', (req, res) => {
-  if (!req.session.user || req.session.user.type !== 'restaurant') {
-    return res.redirect('/login');
-  }
+app.get('/restaurant/marketing', checkSub, (req, res) => {
   res.render('restaurant-marketing');
 });
 
