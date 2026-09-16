@@ -1,9 +1,9 @@
 /**
- * AI-Powered Restaurant Agent - LLM-style (like ChatGPT)
+ * AI-Powered Restaurant Agent - Fully Natural (ChatGPT style)
  * 
- * Fully autonomous, natural conversation engine.
- * Not scripted - uses AI to understand and respond to ANY message.
- * Falls back to intelligent rule-based responses.
+ * NO keywords, NO hardcoded patterns.
+ * Uses LLM to understand intent and respond naturally.
+ * Hard limit on quantity (max 5 per item).
  */
 
 let zaiInstance = null;
@@ -46,7 +46,7 @@ async function getZAI() {
     console.log('[AI] z-ai SDK initialized');
     return zaiInstance;
   } catch (e) {
-    console.log('[AI] z-ai not available, using fallback');
+    console.log('[AI] z-ai not available:', e.message);
     aiAvailable = false;
     return null;
   }
@@ -57,7 +57,7 @@ function isAIAvailable() {
 }
 
 /**
- * Generate response - ChatGPT style
+ * Generate response - ChatGPT style, fully natural
  */
 async function generateResponse(restaurant, customer, customerMessage, context = {}) {
   try {
@@ -74,7 +74,7 @@ async function generateResponse(restaurant, customer, customerMessage, context =
     ];
     
     if (context.conversationHistory && context.conversationHistory.length > 0) {
-      context.conversationHistory.slice(-8).forEach(msg => {
+      context.conversationHistory.slice(-10).forEach(msg => {
         messages.push({ role: msg.role, content: msg.content });
       });
     }
@@ -102,7 +102,7 @@ async function generateResponse(restaurant, customer, customerMessage, context =
 }
 
 /**
- * System prompt - fully natural, not scripted
+ * System prompt - Natural, no keywords
  */
 function buildSystemPrompt(restaurant, customer, context) {
   const {
@@ -131,31 +131,31 @@ function buildSystemPrompt(restaurant, customer, context) {
 
   return `Tu ek real insaan hai jo ${restaurant.name} k yahan staff member hai. WhatsApp par customers k saath baat kar raha hai.
 
-Tu ek friendly, helpful aur natural dostana agent hai. ChatGPT ki tarah HAR tarah k sawal ka jawab de sakta hai - sirf restaurant k baare mein nahi, balki general baatein bhi kar sakta hai (weather, greetings, etc).
+Aap ek normal waiter hain. Agar customer kisi bhi tarah se khana maangay, to us ka order process karen, bajaye is ke ke aap makhsoos lafzon ka intezar karen. Customer jo bhi style mein baat kare (jaise "yaar aik pizza lagao", "bhook lagi hai", "kya khilaoge"), aap uska matlab samajh kar natural jawab dein.
 
-PERSONALITY:
+Aap ki personality:
 - Warm, friendly, caring - jaise ek dost baat kar raha ho
 - Roman Urdu/English mix (Pakistani WhatsApp style)
 - 1-2 lines reply (real WhatsApp texting style)
 - 1-2 emojis naturally
-- Kabhi "main AI hoon" mat bol
+- Kabhi "main AI hoon" ya "bot" mat bol
 - Natural curiosity - puch le kya chahte hain
 - Humor aur warmth dikhao
 
-WHAT YOU CAN DO:
-- Restaurant k baare mein kuch bhi baat kare (food, hours, menu, etc)
-- Orders le, menu suggest kare, deals batae
-- General chat - greetings, weather, small talk
-- Customer k sawalon ka natural jawab
-- Cart manage kare
-- Checkout flow handle kare
+Aap kya kar sakte hain:
+- Restaurant k baare mein HAR tarah ki baat karein (food, service, hours, etc)
+- Orders lein, menu suggest karein, deals batae
+- General chat - weather, greetings, small talk
+- Customer k sawalon ka natural jawab dein
+- Cart manage karein, items add/remove karein
+- Checkout flow handle karein
 
-CRITICAL RULES:
-- Quantity sirf tabhi badhao jab customer EXPLICITLY bole (2x, 2 plates, do, etc)
-- Price ko quantity mat samajho!
-- 1 message mein 1 item add karo
-- Restaurant band ho to batao
-- Natural conversation - har sawal ka jawab do
+CRITICAL RULES (MUST FOLLOW):
+1. Quantity Limit: Kisi bhi item ki quantity 5 se zyada Nahi ho sakti. Agar customer 5 se zyada maange (jaise 20), toh politely refuse karein: "Maaf kijiyega, aap aik waqt mein 5 se zyada items order nahi kar sakty. Kya main 5 add kar doon?"
+2. Prices ko quantity mat samjho! (e.g., Rs. 1800 price hai, 1800 quantity nahi)
+3. 1 message mein 1 item add karo (natural flow)
+4. Restaurant band ho to batao
+5. Natural conversation - har sawal ka jawab do, koi bhi sawal ho
 
 Restaurant: ${restaurant.name}
 Phone: ${restaurant.phone}
@@ -171,7 +171,7 @@ Customer: ${customer?.name || 'Naya customer'}`;
 }
 
 /**
- * Parse customer message
+ * Parse customer message - AI powered intent detection
  */
 async function parseCustomerMessage(message, menuItems, cart = []) {
   try {
@@ -187,11 +187,21 @@ async function parseCustomerMessage(message, menuItems, cart = []) {
       messages: [
         {
           role: 'assistant',
-          content: `Customer message parse karein. Return ONLY JSON:
-{"action":"chat|add_items|checkout|confirm|cancel","items":[{"name":"item","qty":1}],"order_type":"delivery|pickup|null","customer_name":"string|null","customer_phone":"string|null","customer_address":"string|null","wants_to_checkout":false,"wants_to_confirm":false,"wants_to_cancel":false}
+          content: `Customer message parse karein. Customer koi bhi tareeqe se baat kar sakta hai (jaise "yaar 2 pizza lagao", "bhook lagi hai biryani chahiye", "menu dikha"). Aap ko intent samajh kar action lena hai.
 
-CRITICAL: qty sirf tabhi 1 se zyada karein jab customer CLEARLY likhe (2x, 2 plates, do). Price ko quantity mat samajho!
-Menu: ${menuSummary}`
+Return ONLY JSON:
+{"action":"chat|add_items|checkout|confirm|cancel","items":[{"name":"exact menu item name","qty":1}],"order_type":"delivery|pickup|null","customer_name":"string|null","customer_phone":"string|null","customer_address":"string|null","wants_to_checkout":false,"wants_to_confirm":false,"wants_to_cancel":false}
+
+CRITICAL RULES:
+- qty MAX 5 ho sakti hai. Agar customer 5 se zyada maange (jaise 20), toh qty = 5 set karein (usko baad mein bot batayega limit ki)
+- Price numbers (jaise Rs. 1800) ko quantity mat samajho
+- Agar customer general baat kar raha hai to action = "chat"
+- Agar customer khana maange to action = "add_items" aur items mein add karein
+- Customer ne "done", "bas", "ho gaya" kaha to action = "checkout"
+- Customer ne "cancel" kaha to action = "cancel"
+- Customer apna naam/address/phone de raha hai to action = "chat" (bot handle karega)
+
+Menu items: ${menuSummary}`
         },
         { role: 'user', content: message }
       ],
@@ -216,17 +226,8 @@ Menu: ${menuSummary}`
           item.name.toLowerCase().includes(m.name.toLowerCase())
         );
         if (menuItem) {
-          let qty = 1;
-          if (item.qty && item.qty > 1) {
-            const numPattern = new RegExp(`(\\d+)\\s*x\\s*${menuItem.name}`, 'i');
-            const numMatch = message.match(numPattern);
-            if (numMatch) qty = Math.min(parseInt(numMatch[1]), 20);
-            else {
-              const platePattern = new RegExp(`(\\d+)\\s*(plate|portion|piece)`, 'i');
-              const plateMatch = message.match(platePattern);
-              if (plateMatch) qty = Math.min(parseInt(plateMatch[1]), 20);
-            }
-          }
+          // HARD LIMIT: Max 5 quantity per item
+          let qty = Math.min(Math.max(item.qty || 1, 1), 5);
           matchedItems.push({ item_id: menuItem.id, name: menuItem.name, price: menuItem.price, qty });
         }
       }
@@ -247,7 +248,7 @@ Menu: ${menuSummary}`
 }
 
 /**
- * Basic parser - 100% reliable
+ * Basic parser - 100% reliable, no keywords matching
  */
 function basicParseMessage(message, menuItems, cart = []) {
   const lower = message.toLowerCase().trim();
@@ -283,17 +284,26 @@ function basicParseMessage(message, menuItems, cart = []) {
     return result;
   }
   
-  // Find menu items
+  // Find menu items - natural matching
   for (const menuItem of menuItems) {
     const itemName = menuItem.name.toLowerCase();
     if (lower.includes(itemName)) {
       let qty = 1;
       const qtyXMatch = message.match(new RegExp(`(\\d+)\\s*x\\s*${itemName}`, 'i'));
-      if (qtyXMatch) qty = Math.min(parseInt(qtyXMatch[1]), 20);
-      else {
-        const plateMatch = message.match(/(\d+)\s*(plate|plates|portion|portions)/i);
-        if (plateMatch && lower.includes(itemName)) qty = Math.min(parseInt(plateMatch[1]), 20);
+      if (qtyXMatch) {
+        qty = parseInt(qtyXMatch[1]);
+      } else {
+        const plateMatch = message.match(/(\d+)\s*(plate|plates|portion|portions|piece|pieces)/i);
+        if (plateMatch && lower.includes(itemName)) {
+          qty = parseInt(plateMatch[1]);
+        }
       }
+      
+      // HARD LIMIT: Max 5 per item
+      if (qty > 5) {
+        qty = 5; // Force to 5, bot will tell customer about limit
+      }
+      
       result.action = 'add_items';
       result.items = [{ item_id: menuItem.id, name: menuItem.name, price: menuItem.price, qty }];
       break;
@@ -307,7 +317,7 @@ function basicParseMessage(message, menuItems, cart = []) {
 }
 
 /**
- * Fallback response - intelligent, not robotic
+ * Fallback response - intelligent, natural
  */
 function getFallbackResponse(message, context = {}) {
   const lower = (message || '').toLowerCase().trim();
@@ -320,12 +330,11 @@ function getFallbackResponse(message, context = {}) {
     return `Bataiye, kya help karoon? 😊\n\n*menu* - dekhein kya kya hai\n*order* - order karein`;
   }
   
-  // Greetings - natural
-  if (/^(salam|assalam|assalamualaikum|assalam o alaikum|salaam|hi+|hello+|hey+|yo|aoa|hola|adab)/.test(lower)) {
+  if (/^(salam|assalam|assalamualaikum|salaam|hi+|hello+|hey+|yo|aoa|hola|adab)/.test(lower)) {
     const greetings = [
-      `Walaikum salam! 🌟\n\n${restaurant.name || 'Restaurant'} mein khush aamdeed! 😊\n\nKya order karna chahenge? "menu" likh kar menu dekh sakte hain!`,
+      `Walaikum salam! 🌟\n\n${restaurant.name || 'Restaurant'} mein khush aamdeed! 😊\n\nKya order karna chahenge?`,
       `Assalam o Alaikum! 🌟\n\nAap ka swagat hai! Bataiye kya khilaoon? 😊`,
-      `Adab! 🌟\n\nKhush aamdeed! Kya chahiye? Menu dekhne k liye "menu" likhein! 😊`
+      `Adab! 🌟\n\nKhush aamdeed! Kya chahiye? 😊`
     ];
     return greetings[Math.floor(Math.random() * greetings.length)];
   }
@@ -340,7 +349,6 @@ function getFallbackResponse(message, context = {}) {
     return 'Allah hafiz! 🌙 Phir milte hain! 😊';
   }
   
-  // Menu
   if (/^(menu|cart dekho|kya kya hai|kya mojood|items|list)/.test(lower) || lower === 'menu') {
     if (!isOpen) return `Maaf kijiye, restaurant abhi band hai. 😔`;
     if (menuItems.length === 0) return 'Menu abhi update nahi hua. 😅';
@@ -361,15 +369,7 @@ function getFallbackResponse(message, context = {}) {
   
   if (/^(order|new order|place order)/.test(lower)) {
     if (!isOpen) return `Maaf kijiye, restaurant abhi band hai. 😔`;
-    return `Bilkul! 🛒 Bataiye kya order karna hai?\n\nItem ka naam likhein jaise "Chicken Biryani"\n\nJab ho jaye toh "done" likhein! 😊`;
-  }
-  
-  if (/^(status|order kya hua)/.test(lower)) {
-    return 'Last order check karne k liye thoda wait karein, ya naya order karein! 😊';
-  }
-  
-  if (/^(cancel|cancel karo)/.test(lower)) {
-    return 'Theek hai, cancel kar diya. 🙏 Kuch aur chahiye?';
+    return `Bilkul! 🛒 Bataiye kya order karna hai?\n\nItem ka naam likhein! 😊`;
   }
   
   if (/^(done|ho gaya|bas itna|finish)/.test(lower)) {
@@ -394,7 +394,7 @@ function getFallbackResponse(message, context = {}) {
   if (/(address|location|kahan)/.test(lower)) {
     return `Humara address: ${restaurant.address || 'N/A'} 📍`;
   }
-  if (/(payment|cash|card|easypaisa|jazzcash)/.test(lower)) {
+  if (/(payment|cash|card|easypaisa)/.test(lower)) {
     return 'Payment: 💵 Cash on Delivery | 📱 EasyPaisa/JazzCash 😊';
   }
   
@@ -406,7 +406,6 @@ function getFallbackResponse(message, context = {}) {
     return `${matchedItem.name} cart mein add ho gaya! ✅ (Rs. ${matchedItem.price})\n\nAur kuch? Ya "done" likhein! 😊`;
   }
   
-  // Default - natural
   const defaults = [
     `Bataiye, kya help karoon? 😊\n\n*menu* - menu dekhein\n*order* - order karein`,
     `Samajh gaya! 😊 Kya order karna chahenge?`,
