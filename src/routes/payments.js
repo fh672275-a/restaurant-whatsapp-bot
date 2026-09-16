@@ -102,7 +102,7 @@ router.post('/trial', requireAuth, (req, res) => {
 // ============ CREATE PAYMENT REQUEST ============
 router.post('/create', requireAuth, (req, res) => {
   try {
-    const { planId, paymentMethod } = req.body;
+    const { planId, paymentMethod, billingCycle } = req.body;
     
     const plan = PRICING_PLANS[planId];
     if (!plan) return res.status(400).json({ error: 'Invalid plan' });
@@ -110,25 +110,43 @@ router.post('/create', requireAuth, (req, res) => {
     const method = PAYMENT_METHODS[paymentMethod];
     if (!method) return res.status(400).json({ error: 'Invalid payment method' });
     
+    // Determine amount based on billing cycle
+    let amount, durationLabel, validMonths;
+    if (billingCycle === 'yearly') {
+      amount = plan.yearly;
+      durationLabel = '1 Year';
+      validMonths = 12;
+    } else if (billingCycle === 'onetime') {
+      amount = plan.oneTime;
+      durationLabel = 'Lifetime';
+      validMonths = 999; // lifetime
+    } else {
+      amount = plan.monthly;
+      durationLabel = '1 Month';
+      validMonths = 1;
+    }
+    
     const paymentId = generateId('pay_');
     const restaurantId = req.session.user.id;
     
     db.prepare(`INSERT INTO payments 
-      (id, restaurant_id, plan_id, amount, currency, payment_method, status, created_at)
-      VALUES (?, ?, ?, ?, 'PKR', ?, 'pending', CURRENT_TIMESTAMP)`)
-      .run(paymentId, restaurantId, planId, plan.price, paymentMethod);
+      (id, restaurant_id, plan_id, amount, currency, payment_method, status, created_at, notes)
+      VALUES (?, ?, ?, ?, 'PKR', ?, 'pending', CURRENT_TIMESTAMP, ?)`)
+      .run(paymentId, restaurantId, planId, amount, paymentMethod, billingCycle || 'monthly');
     
     res.json({
       success: true,
       paymentId,
-      amount: plan.price,
+      amount,
+      billingCycle: billingCycle || 'monthly',
+      duration: durationLabel,
       planName: plan.name,
       paymentMethod: method.name,
       accountName: method.accountName,
       accountNumber: method.accountNumber,
       whatsappNumber: method.whatsappNumber,
       instructions: method.instructions,
-      message: `Rs. ${plan.price} ${method.name} par bhejein (${method.accountNumber} - ${method.accountName}), phir screenshot upload karein`
+      message: `Rs. ${amount} ${method.name} par bhejein (${method.accountNumber} - ${method.accountName}), phir screenshot upload karein`
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -221,7 +239,7 @@ router.get('/subscription', requireAuth, (req, res) => {
     const plan = PRICING_PLANS[subCheck.subscription.plan_id];
     res.json({ 
       subscription: subCheck.subscription,
-      plan: plan ? { name: plan.name, price: plan.price } : null,
+      plan: plan ? { name: plan.name, monthly: plan.monthly, yearly: plan.yearly, oneTime: plan.oneTime } : null,
       countdown: subCheck.countdown,
       hasAccess: subCheck.hasAccess,
       isTrial: subCheck.isTrial,
@@ -236,23 +254,28 @@ router.get('/subscription', requireAuth, (req, res) => {
   }
 });
 
-// ============ RENEW SUBSCRIPTION (after payment) ============
+// ============ RENEW SUBSCRIPTION (with billing cycle support) ============
 router.post('/renew', requireAuth, (req, res) => {
   try {
-    const { planId } = req.body;
+    const { planId, billingCycle } = req.body;
     const plan = PRICING_PLANS[planId];
     if (!plan) return res.status(400).json({ error: 'Invalid plan' });
     
     const restaurantId = req.session.user.id;
     
-    // Deactivate old subscriptions
     db.prepare('UPDATE subscriptions SET status = ? WHERE restaurant_id = ? AND status = ?')
       .run('cancelled', restaurantId, 'active');
     
-    // Create new subscription (30 days)
     const subId = generateId('sub_');
     const validUntil = new Date();
-    validUntil.setMonth(validUntil.getMonth() + 1);
+    
+    if (billingCycle === 'yearly') {
+      validUntil.setFullYear(validUntil.getFullYear() + 1);
+    } else if (billingCycle === 'onetime') {
+      validUntil.setFullYear(validUntil.getFullYear() + 100);
+    } else {
+      validUntil.setMonth(validUntil.getMonth() + 1);
+    }
     
     db.prepare(`INSERT INTO subscriptions 
       (id, restaurant_id, plan_id, status, trial, valid_from, valid_until)
@@ -272,44 +295,28 @@ router.post('/renew', requireAuth, (req, res) => {
   }
 });
 
-// ============ GET CURRENT SUBSCRIPTION ============
+// ============ GET CURRENT SUBSCRIPTION (with countdown) ============
 router.get('/subscription', requireAuth, (req, res) => {
-  const sub = db.prepare(`
-    SELECT * FROM subscriptions 
-    WHERE restaurant_id = ? AND status = 'active'
-    ORDER BY created_at DESC LIMIT 1
-  `).get(req.session.user.id);
+  const { checkSubscription } = require('../middleware/subscription');
+  const subCheck = checkSubscription(req.session.user.id);
   
-  if (sub) {
-    const plan = PRICING_PLANS[sub.plan_id];
+  if (subCheck.subscription) {
+    const plan = PRICING_PLANS[subCheck.subscription.plan_id];
     res.json({ 
-      subscription: sub,
-      plan: plan ? { name: plan.name, price: plan.price } : null
+      subscription: subCheck.subscription,
+      plan: plan ? { name: plan.name, monthly: plan.monthly, yearly: plan.yearly, oneTime: plan.oneTime } : null,
+      countdown: subCheck.countdown,
+      hasAccess: subCheck.hasAccess,
+      isTrial: subCheck.isTrial,
+      message: subCheck.message
     });
   } else {
-    res.json({ subscription: null });
+    res.json({ 
+      subscription: null,
+      hasAccess: false,
+      message: subCheck.message
+    });
   }
 });
-
-// ============ HELPER: ACTIVATE SUBSCRIPTION ============
-function activateSubscription(restaurantId, planId, paymentId) {
-  db.prepare('UPDATE subscriptions SET status = ? WHERE restaurant_id = ? AND status = ?')
-    .run('cancelled', restaurantId, 'active');
-  
-  const plan = PRICING_PLANS[planId];
-  const subId = generateId('sub_');
-  const validUntil = new Date();
-  validUntil.setMonth(validUntil.getMonth() + 1);
-  
-  db.prepare(`INSERT INTO subscriptions 
-    (id, restaurant_id, plan_id, payment_id, status, trial, valid_from, valid_until, created_at)
-    VALUES (?, ?, ?, ?, 'active', 0, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)`)
-    .run(subId, restaurantId, planId, paymentId, validUntil.toISOString());
-  
-  db.prepare('UPDATE restaurants SET subscription_plan = ? WHERE id = ?')
-    .run(planId, restaurantId);
-  
-  console.log(`[Payment] Subscription activated: ${restaurantId} -> ${planId}`);
-}
 
 module.exports = router;
