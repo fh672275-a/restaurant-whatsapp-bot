@@ -159,22 +159,7 @@ function getCustomerContext(restaurantId, customer) {
 
 async function sendTextWithDelay(sock, jid, text) {
   try {
-    const typingMs = Math.min(Math.max(text.length * 20, 800), 3000);
-    
-    if (typeof sock.sendPresenceUpdate === 'function') {
-      try {
-        await sock.sendPresenceUpdate('composing', jid);
-      } catch (e) {}
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, typingMs));
-    
-    if (typeof sock.sendPresenceUpdate === 'function') {
-      try {
-        await sock.sendPresenceUpdate('paused', jid);
-      } catch (e) {}
-    }
-    
+    // INSTANT reply - no typing delay
     await sock.sendMessage(jid, { text });
   } catch (e) {
     console.error('[Bot] Send error:', e.message);
