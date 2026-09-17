@@ -1,9 +1,8 @@
 /**
- * AI-Powered Restaurant Agent - Fully Natural (ChatGPT style)
+ * AI-Powered Restaurant Agent - STRICT RULE-BASED LLM
  * 
- * NO keywords, NO hardcoded patterns.
- * Uses LLM to understand intent and respond naturally.
- * Hard limit on quantity (max 5 per item).
+ * CRITICAL FIX: Never invents items, never adds items customer didn't order.
+ * Natural conversation, context-aware, understands corrections.
  */
 
 let zaiInstance = null;
@@ -57,7 +56,7 @@ function isAIAvailable() {
 }
 
 /**
- * Generate response - ChatGPT style, fully natural
+ * Generate response - STRICT natural conversation
  */
 async function generateResponse(restaurant, customer, customerMessage, context = {}) {
   try {
@@ -84,7 +83,7 @@ async function generateResponse(restaurant, customer, customerMessage, context =
     const completion = await zai.chat.completions.create({
       messages,
       thinking: { type: 'disabled' },
-      temperature: 0.8,
+      temperature: 0.7,
       max_tokens: 200
     });
 
@@ -102,7 +101,7 @@ async function generateResponse(restaurant, customer, customerMessage, context =
 }
 
 /**
- * System prompt - Natural, no keywords
+ * System prompt - STRICT RULES
  */
 function buildSystemPrompt(restaurant, customer, context) {
   const {
@@ -126,37 +125,62 @@ function buildSystemPrompt(restaurant, customer, context) {
   let cartSummary = '';
   if (cart.length > 0) {
     const subtotal = cart.reduce((s, i) => s + (i.qty * i.price), 0);
-    cartSummary = `\n\nCART: ${cart.map(i => `${i.qty}x ${i.name}`).join(', ')} = Rs. ${subtotal}`;
+    cartSummary = `\n\nCURRENT CART: ${cart.map(i => `${i.qty}x ${i.name} (Rs. ${i.qty * i.price})`).join(', ')} = Rs. ${subtotal}`;
   }
 
-  return `Tu ek real insaan hai jo ${restaurant.name} k yahan staff member hai. WhatsApp par customers k saath baat kar raha hai.
+  return `Aap ${restaurant.name} k yahan ek real waiter hain. WhatsApp par customers k saath natural baat kar rahe hain.
 
-Aap ek normal waiter hain. Agar customer kisi bhi tarah se khana maangay, to us ka order process karen, bajaye is ke ke aap makhsoos lafzon ka intezar karen. Customer jo bhi style mein baat kare (jaise "yaar aik pizza lagao", "bhook lagi hai", "kya khilaoge"), aap uska matlab samajh kar natural jawab dein.
+=== ABSOLUTE RULES (NEVER BREAK THESE) ===
 
-Aap ki personality:
-- Warm, friendly, caring - jaise ek dost baat kar raha ho
+1. CUSTOMER SAID IT -> CAN BE ORDERED. CUSTOMER DID NOT SAY IT -> DO NOT ADD IT.
+2. NEVER invent, assume, guess, or add items customer didn't explicitly request.
+3. NEVER add multiple items automatically.
+4. NEVER convert suggestions into orders without explicit customer confirmation.
+5. Price numbers (Rs. 500) are PRICES, NOT quantities.
+6. Default quantity is 1 ONLY if customer clearly wants that item.
+7. MAX quantity per item is 5. If customer asks for more, politely refuse.
+8. ALWAYS show order summary before final confirmation.
+9. Customer corrections have HIGHEST PRIORITY. If customer says "nahi, sirf burger tha", remove everything else.
+10. NEVER return to keyword instructions like "menu likhein" when customer is having a conversation.
+11. Understand CONTEXT. If customer says "woh wala", refer to previous messages.
+12. If unclear, ASK. Never guess.
+13. If customer says "remove fries", only remove fries.
+14. If customer says "quantity 2 kar do", only change that item's quantity.
+15. NEVER manufacture an order. Only record what customer explicitly requested.
+
+=== CONVERSATION STYLE ===
+
+- Natural, human-like conversation (jaise ek real waiter baat kare)
 - Roman Urdu/English mix (Pakistani WhatsApp style)
-- 1-2 lines reply (real WhatsApp texting style)
+- 1-2 lines reply (short, like real WhatsApp texting)
 - 1-2 emojis naturally
-- Kabhi "main AI hoon" ya "bot" mat bol
-- Natural curiosity - puch le kya chahte hain
-- Humor aur warmth dikhao
+- NEVER say "main AI hoon" or "bot"
+- NEVER force customer to use keywords like "menu", "order", etc.
+- Understand normal language: "kya available hai?", "bhook lagi hai", "ek burger de do"
 
-Aap kya kar sakte hain:
-- Restaurant k baare mein HAR tarah ki baat karein (food, service, hours, etc)
-- Orders lein, menu suggest karein, deals batae
-- General chat - weather, greetings, small talk
-- Customer k sawalon ka natural jawab dein
-- Cart manage karein, items add/remove karein
-- Checkout flow handle karein
+=== HOW TO HANDLE MENU QUESTIONS ===
 
-CRITICAL RULES (MUST FOLLOW):
-1. Quantity Limit: Kisi bhi item ki quantity 5 se zyada Nahi ho sakti. Agar customer 5 se zyada maange (jaise 20), toh politely refuse karein: "Maaf kijiyega, aap aik waqt mein 5 se zyada items order nahi kar sakty. Kya main 5 add kar doon?"
-2. Prices ko quantity mat samjho! (e.g., Rs. 1800 price hai, 1800 quantity nahi)
-3. 1 message mein 1 item add karo (natural flow)
-4. Restaurant band ho to batao
-5. Natural conversation - har sawal ka jawab do, koi bhi sawal ho
+If customer asks "kya kya hai?", "menu dikha", "kya available hai", etc:
+-> List the actual menu items naturally with prices.
+-> Do NOT say "menu likhein". Instead, tell them what's available.
 
+=== HOW TO HANDLE ORDERS ===
+
+If customer says "1 burger chahiye":
+-> Add ONLY 1 burger. Nothing else.
+-> Confirm: "1 Burger - Rs. 500. Aur kuch chahiye?"
+
+If customer says "2 burger aur 1 fries":
+-> Add 2 burgers + 1 fries. Nothing else.
+
+If customer says "pizza bhi":
+-> Ask which pizza. Don't add random pizza.
+
+If customer says "nahi, sirf burger tha":
+-> Remove everything else, keep only burger.
+-> "Maaf kijiye. Sirf 1 burger order kar raha hoon."
+
+=== RESTAURANT INFO ===
 Restaurant: ${restaurant.name}
 Phone: ${restaurant.phone}
 Address: ${restaurant.address || 'N/A'}
@@ -171,7 +195,8 @@ Customer: ${customer?.name || 'Naya customer'}`;
 }
 
 /**
- * Parse customer message - AI powered intent detection
+ * Parse customer message - STRICT parsing
+ * ONLY extract items customer EXPLICITLY requested
  */
 async function parseCustomerMessage(message, menuItems, cart = []) {
   try {
@@ -187,19 +212,37 @@ async function parseCustomerMessage(message, menuItems, cart = []) {
       messages: [
         {
           role: 'assistant',
-          content: `Customer message parse karein. Customer koi bhi tareeqe se baat kar sakta hai (jaise "yaar 2 pizza lagao", "bhook lagi hai biryani chahiye", "menu dikha"). Aap ko intent samajh kar action lena hai.
+          content: `Customer message parse karein. STRICT RULES:
+
+1. ONLY add items that customer EXPLICITLY requested
+2. NEVER invent, guess, or assume items
+3. NEVER add items from menu unless customer clearly asked for them
+4. Price numbers (Rs. 500) are PRICES, not quantities
+5. Default qty = 1 (only if customer clearly wants that item)
+6. MAX qty = 5 per item
+7. If customer asks "kya available hai" -> action = "chat" (bot will show menu)
+8. If customer says "nahi, sirf burger tha" -> action = "correct" (remove other items)
+9. If customer says "remove fries" -> action = "remove" 
+10. If customer says "quantity 2 kar do" -> action = "update_qty"
+11. NEVER add suggested items as orders
 
 Return ONLY JSON:
-{"action":"chat|add_items|checkout|confirm|cancel","items":[{"name":"exact menu item name","qty":1}],"order_type":"delivery|pickup|null","customer_name":"string|null","customer_phone":"string|null","customer_address":"string|null","wants_to_checkout":false,"wants_to_confirm":false,"wants_to_cancel":false}
+{
+  "action": "chat|add_items|checkout|confirm|cancel|correct|remove|update_qty",
+  "items": [{"name": "exact menu item name", "qty": 1}],
+  "remove_items": ["item names to remove"],
+  "update_qty": {"item_name": "burger", "new_qty": 2},
+  "order_type": "delivery|pickup|null",
+  "customer_name": "string|null",
+  "customer_phone": "string|null", 
+  "customer_address": "string|null",
+  "wants_to_checkout": false,
+  "wants_to_confirm": false,
+  "wants_to_cancel": false,
+  "reply_hint": "what customer wants"
+}
 
-CRITICAL RULES:
-- qty MAX 5 ho sakti hai. Agar customer 5 se zyada maange (jaise 20), toh qty = 5 set karein (usko baad mein bot batayega limit ki)
-- Price numbers (jaise Rs. 1800) ko quantity mat samajho
-- Agar customer general baat kar raha hai to action = "chat"
-- Agar customer khana maange to action = "add_items" aur items mein add karein
-- Customer ne "done", "bas", "ho gaya" kaha to action = "checkout"
-- Customer ne "cancel" kaha to action = "cancel"
-- Customer apna naam/address/phone de raha hai to action = "chat" (bot handle karega)
+CRITICAL: items array should ONLY contain items customer EXPLICITLY asked for. If customer didn't ask for an item, DO NOT add it.
 
 Menu items: ${menuSummary}`
         },
@@ -217,6 +260,7 @@ Menu items: ${menuSummary}`
     
     const parsed = JSON.parse(response);
     
+    // Match items to actual menu items - STRICT
     if (parsed.items && Array.isArray(parsed.items)) {
       const matchedItems = [];
       for (const item of parsed.items) {
@@ -226,7 +270,7 @@ Menu items: ${menuSummary}`
           item.name.toLowerCase().includes(m.name.toLowerCase())
         );
         if (menuItem) {
-          // HARD LIMIT: Max 5 quantity per item
+          // HARD LIMIT: Max 5 per item
           let qty = Math.min(Math.max(item.qty || 1, 1), 5);
           matchedItems.push({ item_id: menuItem.id, name: menuItem.name, price: menuItem.price, qty });
         }
@@ -248,7 +292,7 @@ Menu items: ${menuSummary}`
 }
 
 /**
- * Basic parser - 100% reliable, no keywords matching
+ * Basic parser - 100% reliable, STRICT
  */
 function basicParseMessage(message, menuItems, cart = []) {
   const lower = message.toLowerCase().trim();
@@ -256,60 +300,127 @@ function basicParseMessage(message, menuItems, cart = []) {
   const result = {
     action: 'chat', items: [], order_type: null,
     customer_name: null, customer_phone: null, customer_address: null,
-    wants_to_checkout: false, wants_to_confirm: false, wants_to_cancel: false
+    wants_to_checkout: false, wants_to_confirm: false, wants_to_cancel: false,
+    remove_items: [], update_qty: null
   };
   
-  if (/^(cancel|cancel karo|nahi chahiye|rok do)/.test(lower)) {
+  // Cancel
+  if (/^(cancel|cancel karo|nahi chahiye|rok do|order cancel)/.test(lower)) {
     result.action = 'cancel'; result.wants_to_cancel = true;
     return result;
   }
   
-  if (/^(confirm|yes|haan|ok|okay|theek|pakka|kar do|karein)/.test(lower)) {
+  // Confirm
+  if (/^(confirm|yes|haan|ok|okay|theek|pakka|kar do|karein|ho jaye|confirm karein)/.test(lower)) {
     result.action = 'confirm'; result.wants_to_confirm = true;
     return result;
   }
   
-  if (/^(done|ho gaya|bas itna|finish|complete|checkout)/.test(lower)) {
+  // Checkout
+  if (/^(done|ho gaya|bas itna|finish|complete|checkout|bas kafi|bas yehi|nahi bas)/.test(lower)) {
     result.action = 'checkout'; result.wants_to_checkout = true;
     return result;
   }
   
-  if (lower === '1' || lower.includes('deliver')) {
+  // Correction - "nahi, sirf burger tha"
+  if (lower.includes('nahi') && lower.includes('sirf')) {
+    result.action = 'correct';
+    // Find the item they want to keep
+    for (const menuItem of menuItems) {
+      if (lower.includes(menuItem.name.toLowerCase())) {
+        result.items = [{ item_id: menuItem.id, name: menuItem.name, price: menuItem.price, qty: 1 }];
+        break;
+      }
+    }
+    return result;
+  }
+  
+  // Remove item
+  if (lower.includes('remove') || lower.includes('hata') || lower.includes('hatao') || lower.includes('nikal')) {
+    result.action = 'remove';
+    for (const menuItem of menuItems) {
+      if (lower.includes(menuItem.name.toLowerCase())) {
+        result.remove_items = [menuItem.name];
+        break;
+      }
+    }
+    return result;
+  }
+  
+  // Update quantity
+  const qtyUpdateMatch = lower.match(/(\d+)\s*kar\s*do/) || lower.match(/quantity\s*(\d+)/);
+  if (qtyUpdateMatch) {
+    const newQty = Math.min(parseInt(qtyUpdateMatch[1]), 5);
+    for (const menuItem of menuItems) {
+      if (lower.includes(menuItem.name.toLowerCase())) {
+        result.action = 'update_qty';
+        result.update_qty = { item_name: menuItem.name, new_qty: newQty };
+        break;
+      }
+    }
+    if (result.action === 'update_qty') return result;
+  }
+  
+  // Delivery
+  if (lower === '1' || lower === 'delivery' || lower.includes('deliver')) {
     result.order_type = 'delivery'; result.action = 'add_items';
     return result;
   }
   
-  if (lower === '2' || lower.includes('pickup')) {
+  // Pickup  
+  if (lower === '2' || lower === 'pickup' || lower.includes('pickup') || lower.includes('pick')) {
     result.order_type = 'pickup'; result.action = 'add_items';
     return result;
   }
   
-  // Find menu items - natural matching
-  for (const menuItem of menuItems) {
-    const itemName = menuItem.name.toLowerCase();
-    if (lower.includes(itemName)) {
-      let qty = 1;
-      const qtyXMatch = message.match(new RegExp(`(\\d+)\\s*x\\s*${itemName}`, 'i'));
-      if (qtyXMatch) {
-        qty = parseInt(qtyXMatch[1]);
-      } else {
-        const plateMatch = message.match(/(\d+)\s*(plate|plates|portion|portions|piece|pieces)/i);
-        if (plateMatch && lower.includes(itemName)) {
-          qty = parseInt(plateMatch[1]);
+  // Menu questions - natural language
+  if (lower.includes('kya kya') || lower.includes('kya available') || lower.includes('kya hai') || 
+      lower.includes('menu') || lower.includes('kya chahiye') || lower.includes('options') ||
+      lower.includes('kya khilaoge') || lower.includes('kya milega') || lower.includes('list')) {
+    result.action = 'chat'; // Bot will show menu in response
+    return result;
+  }
+  
+  // Find menu items - ONLY add what customer explicitly asks for
+  const orderWords = ['chahiye', 'chahiye ga', 'kar do', 'kardo', 'de do', 'dedo', 'laga do', 
+                      'bana do', 'order', 'mujhe', 'merko', 'len', 'khana', 'khila', 'de dena',
+                      'chahiye thi', 'lagao', 'do'];
+  const isOrdering = orderWords.some(w => lower.includes(w)) || 
+                     /\d+\s*x\s/.test(lower) || /\d+\s*(plate|portion|piece)/.test(lower);
+  
+  if (isOrdering) {
+    for (const menuItem of menuItems) {
+      const itemName = menuItem.name.toLowerCase();
+      if (lower.includes(itemName)) {
+        let qty = 1;
+        
+        // Check for explicit quantity
+        const qtyXMatch = message.match(new RegExp(`(\\d+)\\s*x\\s*${itemName}`, 'i'));
+        if (qtyXMatch) {
+          qty = parseInt(qtyXMatch[1]);
+        } else {
+          const plateMatch = message.match(/(\d+)\s*(plate|plates|portion|portions|piece|pieces)/i);
+          if (plateMatch && lower.includes(itemName)) {
+            qty = parseInt(plateMatch[1]);
+          } else {
+            // Check for number before item name
+            const numBefore = message.match(new RegExp(`(\\d+)\\s*${itemName}`, 'i'));
+            if (numBefore) qty = parseInt(numBefore[1]);
+          }
         }
+        
+        // HARD LIMIT: Max 5
+        if (qty > 5) qty = 5;
+        if (qty < 1) qty = 1;
+        
+        result.action = 'add_items';
+        result.items = [{ item_id: menuItem.id, name: menuItem.name, price: menuItem.price, qty }];
+        break; // Only first item in basic parser
       }
-      
-      // HARD LIMIT: Max 5 per item
-      if (qty > 5) {
-        qty = 5; // Force to 5, bot will tell customer about limit
-      }
-      
-      result.action = 'add_items';
-      result.items = [{ item_id: menuItem.id, name: menuItem.name, price: menuItem.price, qty }];
-      break;
     }
   }
   
+  // Extract phone
   const phoneMatch = message.match(/(?:\+?92|0)(3\d{9})/);
   if (phoneMatch) result.customer_phone = '0' + phoneMatch[1];
   
@@ -317,7 +428,7 @@ function basicParseMessage(message, menuItems, cart = []) {
 }
 
 /**
- * Fallback response - intelligent, natural
+ * Fallback response - natural, context-aware
  */
 function getFallbackResponse(message, context = {}) {
   const lower = (message || '').toLowerCase().trim();
@@ -327,16 +438,37 @@ function getFallbackResponse(message, context = {}) {
   const menuItems = context.menuItems || [];
   
   if (!lower) {
-    return `Bataiye, kya help karoon? 😊\n\n*menu* - dekhein kya kya hai\n*order* - order karein`;
+    return `Bataiye, kya help karoon? 😊`;
   }
   
+  // Greetings
   if (/^(salam|assalam|assalamualaikum|salaam|hi+|hello+|hey+|yo|aoa|hola|adab)/.test(lower)) {
     const greetings = [
       `Walaikum salam! 🌟\n\n${restaurant.name || 'Restaurant'} mein khush aamdeed! 😊\n\nKya order karna chahenge?`,
-      `Assalam o Alaikum! 🌟\n\nAap ka swagat hai! Bataiye kya khilaoon? 😊`,
-      `Adab! 🌟\n\nKhush aamdeed! Kya chahiye? 😊`
+      `Assalam o Alaikum! 🌟\n\nAap ka swagat hai! Bataiye kya khilaoon? 😊`
     ];
     return greetings[Math.floor(Math.random() * greetings.length)];
+  }
+  
+  // Natural menu questions
+  if (lower.includes('kya kya') || lower.includes('kya available') || lower.includes('kya hai') || 
+      lower.includes('menu') || lower.includes('kya khilaoge') || lower.includes('kya milega') ||
+      lower.includes('options') || lower.includes('kya chahiye') || lower.includes('list')) {
+    if (!isOpen) return `Maaf kijiye, restaurant abhi band hai. 😔`;
+    if (menuItems.length === 0) return 'Menu abhi update nahi hua. 😅';
+    
+    let msg = `Hamare paas yeh available hai:\n\n`;
+    const categories = {};
+    menuItems.forEach(item => {
+      const cat = item.category_name || 'Other';
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push(`• ${item.name} - Rs. ${item.price}`);
+    });
+    Object.entries(categories).forEach(([cat, items]) => {
+      msg += `*${cat}*\n${items.join('\n')}\n\n`;
+    });
+    msg += `Kya order karna chahenge? 😊`;
+    return msg;
   }
   
   if (/(kaise? ho|kya haal|how are you)/.test(lower)) {
@@ -349,45 +481,41 @@ function getFallbackResponse(message, context = {}) {
     return 'Allah hafiz! 🌙 Phir milte hain! 😊';
   }
   
-  if (/^(menu|cart dekho|kya kya hai|kya mojood|items|list)/.test(lower) || lower === 'menu') {
+  // Order
+  if (lower.includes('order') || lower.includes('bhook') || lower.includes('khana')) {
     if (!isOpen) return `Maaf kijiye, restaurant abhi band hai. 😔`;
-    if (menuItems.length === 0) return 'Menu abhi update nahi hua. 😅';
-    
-    let msg = `🍽️ ${restaurant.name || 'Menu'}\n\n`;
-    const categories = {};
-    menuItems.forEach(item => {
-      const cat = item.category_name || 'Other';
-      if (!categories[cat]) categories[cat] = [];
-      categories[cat].push(`• ${item.name} - Rs. ${item.price}`);
-    });
-    Object.entries(categories).forEach(([cat, items]) => {
-      msg += `*${cat}*\n${items.join('\n')}\n\n`;
-    });
-    msg += `Order k liye item ka naam likhein! 😊`;
-    return msg;
+    return `Bilkul! 🛒 Bataiye kya order karna hai? 😊`;
   }
   
-  if (/^(order|new order|place order)/.test(lower)) {
-    if (!isOpen) return `Maaf kijiye, restaurant abhi band hai. 😔`;
-    return `Bilkul! 🛒 Bataiye kya order karna hai?\n\nItem ka naam likhein! 😊`;
-  }
-  
+  // Checkout
   if (/^(done|ho gaya|bas itna|finish)/.test(lower)) {
-    if (cart.length === 0) return 'Cart khaali hai! Pehle kuch add karein. 😊';
-    let msg = `Aap ka Cart 🛒\n\n`;
+    if (cart.length === 0) return 'Aap ka cart khaali hai! Pehle kuch add karein. 😊';
+    let msg = `Aap ka Order:\n\n`;
     let subtotal = 0;
     cart.forEach((item, i) => {
       msg += `${i + 1}. ${item.qty}x ${item.name} - Rs. ${item.qty * item.price}\n`;
       subtotal += item.qty * item.price;
     });
-    msg += `\n*Subtotal: Rs. ${subtotal}*\n\nDelivery (1) ya Pickup (2)?`;
+    msg += `\n*Total: Rs. ${subtotal}*\n\nConfirm karein? (Haan/Nahi)`;
     return msg;
   }
   
+  // Correction
+  if (lower.includes('nahi') && lower.includes('sirf')) {
+    return `Maaf kijiye! Order correct kar raha hoon. 😊`;
+  }
+  
+  // Remove
+  if (lower.includes('remove') || lower.includes('hata') || lower.includes('hatao')) {
+    return `Theek hai, remove kar diya. 😊 Aur kuch?`;
+  }
+  
+  // Confirm
   if (/^(confirm|yes|haan|ok)/.test(lower)) {
     return 'Order confirm ho gaya! 🎉 Shukriya! 😊';
   }
   
+  // Hours
   if (/(hours|timing|khulta|kab khulta)/.test(lower)) {
     return 'Hum subah 11 baje se raat 11 baje tak khule hain. ⏰';
   }
@@ -403,14 +531,15 @@ function getFallbackResponse(message, context = {}) {
     lower.includes(m.name.toLowerCase()) || m.name.toLowerCase().includes(lower)
   );
   if (matchedItem) {
-    return `${matchedItem.name} cart mein add ho gaya! ✅ (Rs. ${matchedItem.price})\n\nAur kuch? Ya "done" likhein! 😊`;
+    return `${matchedItem.name} - Rs. ${matchedItem.price} ✅\n\nKitne chahiye? 😊`;
   }
   
+  // Default - natural
   const defaults = [
-    `Bataiye, kya help karoon? 😊\n\n*menu* - menu dekhein\n*order* - order karein`,
+    `Bataiye, kya help karoon? 😊`,
     `Samajh gaya! 😊 Kya order karna chahenge?`,
-    `Ji bataiye! 😊 "menu" likh kar menu dekh lein!`,
-    `Kya chahiye? 😊 "menu" likhein!`
+    `Ji bataiye! 😊`,
+    `Kya chahiye? 😊`
   ];
   return defaults[Math.floor(Math.random() * defaults.length)];
 }

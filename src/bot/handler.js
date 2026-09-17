@@ -315,13 +315,94 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
       aiResponse = 'Theek hai, order cancel kar diya. 🙏\nKuch aur chahiye toh bataiye!';
     }
 
-    // 2. ADD ITEMS TO CART
+    // 2. CORRECTION - "nahi, sirf burger tha"
+    else if (parsed.action === 'correct') {
+      // Keep only items customer explicitly wants
+      const newCart = [];
+      if (parsed.items && parsed.items.length > 0) {
+        parsed.items.forEach(item => {
+          const existing = cart.find(c => c.item_id === item.item_id);
+          if (existing) {
+            newCart.push(existing); // Keep existing item with its qty
+          } else {
+            newCart.push(item);
+          }
+        });
+      }
+      
+      updateConversation(restaurantId, phone, { 
+        state: 'ordering', 
+        cart_json: JSON.stringify(newCart) 
+      });
+      aiContext.cart = newCart;
+      
+      let cartMsg = '';
+      let subtotal = 0;
+      newCart.forEach((item, i) => {
+        cartMsg += `${i + 1}. ${item.qty}x ${item.name} - Rs. ${item.qty * item.price}\n`;
+        subtotal += item.qty * item.price;
+      });
+      
+      aiResponse = `Maaf kijiye! Order correct kar raha hoon. 😊\n\nAap ka order:\n${cartMsg}\nTotal: Rs. ${subtotal}\n\nAur kuch chahiye?`;
+    }
+
+    // 3. REMOVE ITEM - "fries hata do"
+    else if (parsed.action === 'remove' && parsed.remove_items) {
+      const newCart = cart.filter(c => !parsed.remove_items.includes(c.name));
+      updateConversation(restaurantId, phone, { 
+        state: 'ordering', 
+        cart_json: JSON.stringify(newCart) 
+      });
+      aiContext.cart = newCart;
+      
+      let cartMsg = '';
+      let subtotal = 0;
+      newCart.forEach((item, i) => {
+        cartMsg += `${i + 1}. ${item.qty}x ${item.name} - Rs. ${item.qty * item.price}\n`;
+        subtotal += item.qty * item.price;
+      });
+      
+      if (newCart.length > 0) {
+        aiResponse = `Theek hai, remove kar diya. 🗑️\n\nBaqi order:\n${cartMsg}\nTotal: Rs. ${subtotal}`;
+      } else {
+        aiResponse = `Theek hai, remove kar diya. Cart khaali ho gaya. 🗑️`;
+      }
+    }
+
+    // 4. UPDATE QUANTITY - "burger 2 kar do"
+    else if (parsed.action === 'update_qty' && parsed.update_qty) {
+      const { item_name, new_qty } = parsed.update_qty;
+      const cartItem = cart.find(c => c.name.toLowerCase().includes(item_name.toLowerCase()));
+      if (cartItem) {
+        cartItem.qty = Math.min(Math.max(new_qty, 1), 5);
+        updateConversation(restaurantId, phone, { 
+          state: 'ordering', 
+          cart_json: JSON.stringify(cart) 
+        });
+        aiContext.cart = cart;
+        
+        let cartMsg = '';
+        let subtotal = 0;
+        cart.forEach((item, i) => {
+          cartMsg += `${i + 1}. ${item.qty}x ${item.name} - Rs. ${item.qty * item.price}\n`;
+          subtotal += item.qty * item.price;
+        });
+        
+        aiResponse = `✅ Quantity update ho gaya!\n\nAap ka order:\n${cartMsg}\nTotal: Rs. ${subtotal}`;
+      } else {
+        aiResponse = `Yeh item aap ke cart mein nahi hai. 😊`;
+      }
+    }
+
+    // 5. ADD ITEMS TO CART (STRICT - only what customer explicitly asked)
     else if (parsed.action === 'add_items' && parsed.items && parsed.items.length > 0) {
-      // Add items to cart
+      // Add ONLY items customer explicitly requested
       parsed.items.forEach(item => {
         const existing = cart.find(c => c.item_id === item.item_id);
         if (existing) {
           existing.qty += item.qty;
+          // HARD LIMIT: Max 5
+          if (existing.qty > 5) existing.qty = 5;
         } else {
           cart.push(item);
         }
@@ -333,7 +414,6 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
       });
       aiContext.cart = cart;
       
-      // Update customer name/phone/address if provided
       if (parsed.customer_name) {
         prepare('UPDATE customers SET name = ? WHERE id = ?').run(parsed.customer_name, customer.id);
         customer.name = parsed.customer_name;
@@ -342,16 +422,11 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
         prepare('UPDATE bot_conversations SET notes = ? WHERE id = ?').run(parsed.customer_address, conv.id);
       }
       
-      // If customer also provided delivery type, name, phone, address → try to save order!
       if (parsed.order_type && parsed.customer_phone) {
         console.log('[Bot] Customer provided all info! Saving order...');
         const orderResult = await saveOrder(
-          restaurantId, 
-          customer, 
-          cart, 
-          parsed.order_type, 
-          parsed.customer_phone, 
-          parsed.customer_address
+          restaurantId, customer, cart, parsed.order_type, 
+          parsed.customer_phone, parsed.customer_address
         );
         if (orderResult) {
           orderSaved = true;
@@ -364,49 +439,26 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
       aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
     }
 
-    // 3. CHECKOUT (customer says done/bas/ho gaya)
+    // 6. CHECKOUT (customer says done/bas/ho gaya)
     else if (parsed.action === 'checkout' || parsed.wants_to_checkout) {
       if (cart.length === 0) {
         aiResponse = 'Aap ka cart khaali hai! Pehle kuch add karein. 😊';
       } else {
-        // Check if we have customer info
-        const hasName = customer.name || parsed.customer_name;
-        const hasPhone = parsed.customer_phone || customer.phone;
-        const hasAddress = conv.notes || parsed.customer_address;
+        // Show order summary before confirmation
+        let cartMsg = 'Aap ka Order:\n\n';
+        let subtotal = 0;
+        cart.forEach((item, i) => {
+          cartMsg += `${i + 1}. ${item.qty}x ${item.name} - Rs. ${item.qty * item.price}\n`;
+          subtotal += item.qty * item.price;
+        });
+        cartMsg += `\n*Total: Rs. ${subtotal}*\n\nDelivery (1) ya Pickup (2)?`;
         
-        if (parsed.order_type && hasName && hasPhone && hasAddress) {
-          // We have everything! Save order
-          console.log('[Bot] Checkout with all info! Saving order...');
-          const finalName = parsed.customer_name || customer.name;
-          if (parsed.customer_name) {
-            prepare('UPDATE customers SET name = ? WHERE id = ?').run(parsed.customer_name, customer.id);
-            customer.name = parsed.customer_name;
-          }
-          const finalAddress = parsed.customer_address || conv.notes;
-          if (parsed.customer_address) {
-            prepare('UPDATE bot_conversations SET notes = ? WHERE id = ?').run(parsed.customer_address, conv.id);
-          }
-          
-          const orderResult = await saveOrder(
-            restaurantId, customer, cart, parsed.order_type, parsed.customer_phone || customer.phone, finalAddress
-          );
-          if (orderResult) {
-            orderSaved = true;
-            updateConversation(restaurantId, phone, { 
-              state: 'idle', cart_json: '[]', order_type: null, notes: null 
-            });
-          }
-          aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-        } else {
-          // Need more info - ask customer
-          updateConversation(restaurantId, phone, { state: 'ordering' });
-          aiContext.conversationState = 'need_info';
-          aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
-        }
+        updateConversation(restaurantId, phone, { state: 'awaiting_order_type' });
+        aiResponse = cartMsg;
       }
     }
 
-    // 4. CONFIRM (customer confirms after seeing summary)
+    // 7. CONFIRM (customer confirms after seeing summary)
     else if (parsed.action === 'confirm' || parsed.wants_to_confirm) {
       // Check if there's a pending order
       if (conv.state === 'awaiting_confirmation') {
