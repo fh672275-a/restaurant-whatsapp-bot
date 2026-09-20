@@ -173,7 +173,9 @@ function getFallbackResponse(message, context = {}) {
   const restaurant = context.restaurant || {}, menuItems = context.menuItems || [];
   if (!lower) return 'Bataiye, kya help karoon? 😊';
   if (/^(salam|assalam|salaam|hi+|hello+|hey+|aoa|adab)/.test(lower)) return 'Walaikum salam! 🌟\n\n' + (restaurant.name || 'Restaurant') + ' mein khush aamdeed! 😊\n\nKya order karna chahenge?';
-  if (lower.includes('kya kya') || lower.includes('kya available') || lower.includes('kya hai') || lower.includes('menu') || lower.includes('kya khilaoge') || lower.includes('kya milega')) {
+  
+  // Menu questions - handle BOTH "kia" and "kya" spellings
+  if (lower.includes('kya kya') || lower.includes('kia kia') || lower.includes('kya available') || lower.includes('kia available') || lower.includes('kya hai') || lower.includes('kia hai') || lower.includes('kya mojood') || lower.includes('kia mojood') || lower.includes('kya khilaoge') || lower.includes('kia khilaoge') || lower.includes('kya milega') || lower.includes('kia milega') || lower.includes('menu') || lower.includes('options') || lower.includes('list') || lower.includes('paas kya') || lower.includes('paas kia') || lower.includes('kya kya mojood') || lower.includes('kia kia mojood') || lower.includes('kya chahiye') || lower.includes('kia chahiye')) {
     if (!isOpen) return 'Maaf kijiye, restaurant abhi band hai. 😔';
     if (menuItems.length === 0) return 'Menu abhi update nahi hua. 😅';
     let msg = 'Hamare paas yeh available hai:\n\n'; const cats = {};
@@ -181,7 +183,8 @@ function getFallbackResponse(message, context = {}) {
     Object.entries(cats).forEach(([c, items]) => { msg += '*' + c + '*\n' + items.join('\n') + '\n\n'; });
     msg += 'Kya order karna chahenge? 😊'; return msg;
   }
-  if (/(kaise? ho|kya haal)/.test(lower)) return 'Alhamdulillah, theek! 😊 Aap sunayein?';
+  
+  if (/(kaise? ho|kya haal|kia haal)/.test(lower)) return 'Alhamdulillah, theek! 😊 Aap sunayein?';
   if (/(shukriya|thank)/.test(lower)) return 'Aray nahi, thank you toh aap ka! 😊';
   if (/(allah hafiz|bye)/.test(lower)) return 'Allah hafiz! 🌙 Phir milte hain! 😊';
   if (lower.includes('order') || lower.includes('bhook')) { if (!isOpen) return 'Maaf kijiye, restaurant abhi band hai. 😔'; return 'Bilkul! 🛒 Bataiye kya order karna hai? 😊'; }
@@ -198,6 +201,15 @@ function getFallbackResponse(message, context = {}) {
   if (/(payment|cash|card|easypaisa)/.test(lower)) return 'Payment: 💵 Cash | 📱 EasyPaisa/JazzCash 😊';
   const mi = menuItems.find(m => lower.includes(m.name.toLowerCase()) || m.name.toLowerCase().includes(lower));
   if (mi) return mi.name + ' - Rs. ' + mi.price + ' ✅\n\nKitne chahiye? 😊';
+  
+  // If nothing matched but restaurant has menu, SHOW MENU (not generic reply)
+  if (menuItems.length > 0 && lower.length > 3) {
+    let msg = 'Hamare paas yeh available hai:\n\n'; const cats = {};
+    menuItems.forEach(i => { const c = i.category_name || 'Other'; if (!cats[c]) cats[c] = []; cats[c].push('• ' + i.name + ' - Rs. ' + i.price); });
+    Object.entries(cats).forEach(([c, items]) => { msg += '*' + c + '*\n' + items.join('\n') + '\n\n'; });
+    msg += 'Kya order karna chahenge? 😊'; return msg;
+  }
+  
   return 'Bataiye, kya help karoon? 😊';
 }
 
