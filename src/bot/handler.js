@@ -370,11 +370,23 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
     }
 
     // 4. UPDATE QUANTITY - "burger 2 kar do"
-    else if (parsed.action === 'update_qty' && parsed.update_qty) {
-      const { item_name, new_qty } = parsed.update_qty;
-      const cartItem = cart.find(c => c.name.toLowerCase().includes(item_name.toLowerCase()));
+    // 4a. UPDATE QUANTITY (when AI returns items instead of update_qty object)
+    else if (parsed.action === 'update_qty' && parsed.items && parsed.items.length > 0) {
+      const item = parsed.items[0];
+      const cartItem = cart.find(c => c.item_id === item.item_id || c.name.toLowerCase().includes(item.name.toLowerCase()));
       if (cartItem) {
-        cartItem.qty = Math.min(Math.max(new_qty, 1), 5);
+        cartItem.qty = Math.min(Math.max(item.qty, 1), 5);
+        updateConversation(restaurantId, phone, { state: 'ordering', cart_json: JSON.stringify(cart) });
+        aiContext.cart = cart;
+      }
+      aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
+    }
+    else if (parsed.action === 'update_qty' && parsed.update_qty) {
+      const itemName = parsed.update_qty.item_name || parsed.update_qty.name || "";
+      const newQty = parsed.update_qty.new_qty || parsed.update_qty.qty || 1;
+      const cartItem = cart.find(c => c.name.toLowerCase().includes(itemName.toLowerCase()));
+      if (cartItem) {
+        cartItem.qty = Math.min(Math.max(newQty, 1), 5);
         updateConversation(restaurantId, phone, { 
           state: 'ordering', 
           cart_json: JSON.stringify(cart) 
