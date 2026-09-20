@@ -312,7 +312,7 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
       updateConversation(restaurantId, phone, { 
         state: 'idle', cart_json: '[]', order_type: null, notes: null 
       });
-      aiResponse = 'Theek hai, order cancel kar diya. 🙏\nKuch aur chahiye toh bataiye!';
+      aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
     }
 
     // 2. CORRECTION - "nahi, sirf burger tha"
@@ -343,7 +343,7 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
         subtotal += item.qty * item.price;
       });
       
-      aiResponse = `Maaf kijiye! Order correct kar raha hoon. 😊\n\nAap ka order:\n${cartMsg}\nTotal: Rs. ${subtotal}\n\nAur kuch chahiye?`;
+      aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
     }
 
     // 3. REMOVE ITEM - "fries hata do"
@@ -363,9 +363,9 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
       });
       
       if (newCart.length > 0) {
-        aiResponse = `Theek hai, remove kar diya. 🗑️\n\nBaqi order:\n${cartMsg}\nTotal: Rs. ${subtotal}`;
+        aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
       } else {
-        aiResponse = `Theek hai, remove kar diya. Cart khaali ho gaya. 🗑️`;
+        aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
       }
     }
 
@@ -388,9 +388,9 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
           subtotal += item.qty * item.price;
         });
         
-        aiResponse = `✅ Quantity update ho gaya!\n\nAap ka order:\n${cartMsg}\nTotal: Rs. ${subtotal}`;
+        aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
       } else {
-        aiResponse = `Yeh item aap ke cart mein nahi hai. 😊`;
+        aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
       }
     }
 
@@ -442,7 +442,7 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
     // 6. CHECKOUT (customer says done/bas/ho gaya)
     else if (parsed.action === 'checkout' || parsed.wants_to_checkout) {
       if (cart.length === 0) {
-        aiResponse = 'Aap ka cart khaali hai! Pehle kuch add karein. 😊';
+        aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
       } else {
         // Show order summary before confirmation
         let cartMsg = 'Aap ka Order:\n\n';
@@ -454,7 +454,7 @@ async function handleMessage(sock, messageUpsert, restaurantId) {
         cartMsg += `\n*Total: Rs. ${subtotal}*\n\nDelivery (1) ya Pickup (2)?`;
         
         updateConversation(restaurantId, phone, { state: 'awaiting_order_type' });
-        aiResponse = cartMsg;
+        aiResponse = await aiAgent.generateResponse(restaurant, customer, text, aiContext);
       }
     }
 
