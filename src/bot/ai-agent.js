@@ -232,25 +232,67 @@ function basicParseMessage(message, menuItems, cart = []) {
   if (/^(cancel|nahi chahiye|rok do)/.test(lower)) { result.action = 'cancel'; result.wants_to_cancel = true; return result; }
   if (/^(confirm|haan|ok|pakka|kar do|kareen|krdo)/.test(lower)) { result.action = 'confirm'; result.wants_to_confirm = true; return result; }
   if (/^(done|ho gaya|bas itna|finish|bas yehi|bus)/.test(lower)) { result.action = 'checkout'; result.wants_to_checkout = true; return result; }
-  if (lower.includes('nahi') && lower.includes('sirf')) { result.action = 'correct'; for (const mi of menuItems) { if (lower.includes(mi.name.toLowerCase())) { result.items = [{ item_id: mi.id, name: mi.name, price: mi.price, qty: 1 }]; break; } } return result; }
-  if (lower.includes('remove') || lower.includes('hata') || lower.includes('hatao') || lower.includes('nikal')) { result.action = 'remove'; for (const mi of menuItems) { if (lower.includes(mi.name.toLowerCase())) { result.remove_items = [mi.name]; break; } } return result; }
+  if (lower.includes('nahi') && lower.includes('sirf')) { result.action = 'correct'; for (const mi of menuItems) { if (lower.includes(mi.name.toLowerCase())) { result.items.push({ item_id: mi.id, name: mi.name, price: mi.price, qty: 1 }); } } return result; }
+  if (lower.includes('remove') || lower.includes('hata') || lower.includes('hatao') || lower.includes('nikal')) { result.action = 'remove'; for (const mi of menuItems) { if (lower.includes(mi.name.toLowerCase())) { result.remove_items.push(mi.name); } } return result; }
   const qm = lower.match(/(\d+)\s*kar\s*do/) || lower.match(/quantity\s*(\d+)/);
   if (qm) { const nq = Math.min(parseInt(qm[1]), 5); for (const mi of menuItems) { if (lower.includes(mi.name.toLowerCase())) { result.action = 'update_qty'; result.update_qty = { item_name: mi.name, new_qty: nq }; break; } } if (result.action === 'update_qty') return result; }
   if (lower === '1' || lower.includes('deliver')) { result.order_type = 'delivery'; result.action = 'add_items'; return result; }
   if (lower === '2' || lower.includes('pickup')) { result.order_type = 'pickup'; result.action = 'add_items'; return result; }
 
-  // Try to find menu items (fuzzy)
+  // MULTI-ITEM parsing - find ALL items in the message
+  // For each menu item, check if it appears in the message with a quantity
+  const msgWords = lower.split(/\s+/);
+  
   for (const mi of menuItems) {
     const itemName = mi.name.toLowerCase();
-    if (lower.includes(itemName)) {
+    const itemWords = itemName.split(/\s+/);
+    
+    // Check if message includes full item name OR any word matches
+    const fullMatch = lower.includes(itemName);
+    const wordMatch = msgWords.some(mw => itemWords.some(iw => 
+      (iw.length > 2 && mw.includes(iw)) || (mw.length > 2 && iw.includes(mw))
+    ));
+    
+    if (fullMatch || wordMatch) {
       let q = 1;
-      const qx = message.match(new RegExp('(\\d+)\\s*x\\s*' + itemName, 'i'));
-      if (qx) q = parseInt(qx[1]);
-      else { const pm = message.match(/(\d+)\s*(plate|portion|piece)/i); if (pm && lower.includes(itemName)) q = parseInt(pm[1]); }
+      
+      // Try patterns: "2x zinger", "2 zinger", "zinger 2", "do zinger"
+      const patterns = [
+        new RegExp('(\\d+)\\s*x\\s*' + itemName, 'i'),
+        new RegExp('(\\d+)\\s*x\\s*' + itemWords[0], 'i'),
+        new RegExp('(\\d+)\\s*' + itemName, 'i'),
+        new RegExp('(\\d+)\\s*' + itemWords[0], 'i'),
+        new RegExp(itemName + '\\s*(\\d+)', 'i'),
+        new RegExp(itemWords[0] + '\\s*(\\d+)', 'i'),
+        new RegExp(itemWords[itemWords.length-1] + '\\s*(\\d+)', 'i')
+      ];
+      
+      for (const p of patterns) {
+        const m = message.match(p);
+        if (m) { q = parseInt(m[1]); break; }
+      }
+      
+      // Urdu numbers
+      const urduNums = { 'do': 2, 'char': 4, 'teen': 3, 'ek': 1, 'aik': 1, 'paanch': 5, 'chhe': 6, 'aat': 8, 'das': 10 };
+      for (const [word, num] of Object.entries(urduNums)) {
+        // Check if urdu number appears before any item word
+        for (const iw of itemWords) {
+          if (lower.includes(word + ' ' + iw)) { q = num; break; }
+        }
+        if (q !== 1) break;
+      }
+      
       if (q > 5) q = 5; if (q < 1) q = 1;
-      result.action = 'add_items'; result.items = [{ item_id: mi.id, name: mi.name, price: mi.price, qty: q }]; break;
+      
+      // Check if already found (avoid duplicates)
+      const existing = result.items.find(i => i.item_id === mi.id);
+      if (!existing) {
+        result.action = 'add_items';
+        result.items.push({ item_id: mi.id, name: mi.name, price: mi.price, qty: q });
+      }
     }
   }
+  
   const pm = message.match(/(?:\+?92|0)(3\d{9})/); if (pm) result.customer_phone = '0' + pm[1];
   return result;
 }
